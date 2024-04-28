@@ -11,3 +11,4 @@ bs4
 pyyaml
 pydantic==1.9.0
 pendulum
+webdriver-manager
