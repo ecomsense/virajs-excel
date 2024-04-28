@@ -32,7 +32,7 @@ this will activate the virtual environment. Notice that the prompt is now prepen
 
 ### 6. Download this repository from Github 
 ```
-git clone https://github.com/pannet1/virajs-excel.git
+git clone https://github.com/ecomsense/virajs-excel.git
 ```
 if successful, you should be able to see a new directory `virajs-excel` under the current directory `env`
 
