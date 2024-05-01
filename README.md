@@ -1,6 +1,7 @@
 ## Introduction
 this app is for semi-automatic trading with zerodha. This is tested on python>3.9 and <=3.10.0. 
-  
+
+## Setup
 ### 1. Setup your broker account
 setup TOTP for your zerodha account. This is necessary to programatically access your broker account and do trade functions.
 copy the alpha numeric representation of TOTP to your clipboard, as mentioned in step 13.8 of [zerodha totp setup](https://support.zerodha.com/category/your-zerodha-account/login-credentials/login-credentials-of-trading-platforms/articles/time-based-otp-setup). Remember to store this TOTP code from clipboard to some file in your system. We will need it later.
@@ -17,7 +18,8 @@ The default choice of installation is fine for most cases. You may opt out from 
 Virtualenv is a method to contain the python program, so that the system python is not disturbed in any way.
 Create the necessary directories and set up the virtual environment.
 ```
-mkdir C:\ecomsense\ # or you can give any folder name
+# you can give any folder name
+mkdir C:\ecomsense\ 
 cd C:\ecomsense
 python -m venv env
 cd env
@@ -44,9 +46,14 @@ pip install -r requirements.txt
 ```
 
 ### 8. Run the application
-Before we run the application, the credential file needs to be created. Please copy the `excel-virajs.yml` sent to you through whatsapp and modify it suitably.
+Before we run the application, the credential file needs to be created. Please copy the `excel-virajs.yml` sent to you through whatsapp to `env` folder which you created in earlier. Modify it suitably according to your stock broker credentials.
 ```
-
+cd virajs_excel
 python main.py
 ```
+### 9. Create Shortcuts
+There are two bat files `run_algo.bat` and `update.bat` in this folder `virajs-excel`. create desktop shortcuts for them. This way one can run the program by clicking on the `run_algo` without having to run complicated commands from the command line. The `update` shortcut can be clicked whenever the user wants to get the latest updates.
 
+## What do we need to do start the program
+If we have successfully installed the application, clicking on the `run_algo` will start the program. It is basically an one liner which activates the virtualenv and starts the python script `main.py` which is inside `env\virajs-excel\virajs_excel`
+ 
