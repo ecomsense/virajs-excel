@@ -1,2 +1,2 @@
 @echo on
-cmd /k "cd /d ..\Scripts & .\activate & cd /d .\project_name & py main.py"
+cmd /k "cd /d ..\Scripts & .\activate & cd /d .\virajs_excel & py main.py"
