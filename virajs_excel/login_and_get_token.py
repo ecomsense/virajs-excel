@@ -1,5 +1,4 @@
 from omspy_brokers.bypass import Bypass
-from omspy.brokers.zerodha import Zerodha
 from toolkit.fileutils import Fileutils
 
 
@@ -28,6 +27,8 @@ def get_bypass(dct, sec_dir):
 
 def get_zerodha(fdct, sec_dir):
     try:
+        from omspy_brokers.zerodha import Zerodha
+
         zera = Zerodha(
             user_id=fdct["userid"],
             password=fdct["password"],

@@ -6,9 +6,10 @@ class Wsocket:
         self.instrument = ""
         self.ticks = []
         self.kws = kite.kws()
-        self.sym_tkn = [738561]
         if isinstance(sym_tkn, list):
-            self.sym_tkn.append(sym_tkn)
+            self.sym_tkn = sym_tkn
+        else:
+            self.sym_tkn = [738561]
         # Assign the callbacks.
         self.kws.on_ticks = self.on_ticks
         self.kws.on_connect = self.on_connect
@@ -23,7 +24,9 @@ class Wsocket:
 
     def on_ticks(self, ws, ticks):
         # Callback to receive ticks.
-        self.ticks = ticks
+        if ticks:
+            print(ticks)
+        # self.ticks = ticks
 
     def on_connect(self, ws, response):
         # Callback on successful connect.
@@ -31,7 +34,7 @@ class Wsocket:
         ws.subscribe(self.sym_tkn)
 
         # Set RELIANCE to tick in `full` mode.
-        ws.set_mode(ws.MODE_LTP, [738561])
+        ws.set_mode(ws.MODE_LTP, self.sym_tkn)
 
     def on_close(self, ws, code, reason):
         # On connection close stop the main loop
