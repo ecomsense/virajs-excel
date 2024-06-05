@@ -1,7 +1,8 @@
-from constants import CNFG, DATA, SETG, logging
+from constants import O_CNFG, S_DATA, O_SETG, logging
 from login_and_get_token import get_bypass, get_zerodha
 from login_and_get_token import remove_token
 from wsocket import Wsocket
+from symbol import Symbol
 import pendulum as pdlm
 import pandas as pd
 
@@ -16,25 +17,14 @@ FM = (
 
 
 def init():
-    if SETG["broker"] == "bypass":
-        CRED.update(CNFG["bypass"])
-        return get_bypass(CNFG["bypass"], DATA)
+    if O_SETG["broker"] == "bypass":
+        CRED.update(O_CNFG["bypass"])
+        return get_bypass(O_CNFG["bypass"], S_DATA)
     else:
-        CRED.update(CNFG["zerodha"])
-        return get_zerodha(CNFG["zerodha"], DATA)
+        CRED.update(O_CNFG["zerodha"])
+        return get_zerodha(O_CNFG["zerodha"], S_DATA)
 
 
-def market_watch():
-    # TODO get tokens for instruments
-    data = [{"exchange": "NSE", "symbol": "SBIN"}, {"exchange": "NSE", "symbol": "ACC"}]
-    df = pd.DataFrame(data)
-    return df
-
-
-def add_token(row):
-    exch_sym = row["exchange"] + ":" + row["symbol"]
-    resp = API.kite.quote(exch_sym)
-    return resp[exch_sym]["instrument_token"]
 
 
 def candle_data(token):
@@ -56,12 +46,11 @@ def candle_data(token):
 
 def run():
     # find tokens
-    df = market_watch()
-    df["token"] = df.apply(lambda row: add_token(row), axis=1)
+    #
+    INS = ["NSE:SBIN"]
+    SYM = Symbol("NSE")
+    SYM.token(df)
     subscribe = df["token"].tolist()
-
-    instrument = "SBIN"
-    token = df.loc[df["symbol"] == instrument]["token"].values[0]
     # initiate ws
     ws = Wsocket(API.kite, subscribe)
     while True:
@@ -86,5 +75,4 @@ def run():
 
 
 API = init()
-print("welcome Mr. Viraj")
-# run()
+run()
