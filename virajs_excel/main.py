@@ -1,11 +1,80 @@
-from constants import O_FILS, DATA
+from constants import O_CNFG, S_DATA, O_SETG, logging
+from toolkit.kokoo import timer
+from login import get_bypass, get_zerodha
+from wsocket import Wsocket
+from symbol import Symbol
+import pendulum as pdlm
+import pandas as pd
 
-if O_FILS.is_file_not_2day(DATA + "settings.yml"):
-    print("settings file is not modified today")
+
+CRED = {}
 
 
-SETG = O_FILS.get_lst_fm_yml(DATA + "settings.yml")
-if SETG:
-    print(SETG)
-else:
-    print("no settings found")
+def init():
+    if O_SETG["broker"] == "bypass":
+        CRED.update(O_CNFG["bypass"])
+        return get_bypass(O_CNFG["bypass"], S_DATA)
+    else:
+        CRED.update(O_CNFG["zerodha"])
+        return get_zerodha(O_CNFG["zerodha"], S_DATA)
+
+
+def candle_data(token):
+    FM = (
+        pdlm.now()
+        .subtract(days=2)
+        .set(hour=9, minute=15, second=0)
+        .strftime("%Y-%m-%d %H:%M:%S")
+    )
+    to = pdlm.now().strftime("%Y-%m-%d %H:%M:%S")
+    kwargs = dict(instrument_token=token, from_date=FM, to_date=to, interval="minute")
+    lst = API.kite.historical_data(**kwargs)
+    lst = [
+        dict(
+            date=x["date"],
+            open=x["open"],
+            high=x["high"],
+            low=x["low"],
+            close=x["close"],
+        )
+        for x in lst
+    ]
+    timer(1)
+    return lst
+
+
+def run(WS):
+    # initiate ws and get quote
+    while True:
+        try:
+            if WS.kws.is_connected():
+                # WS.kws.set_mode(WS.kws.MODE_LTP, subscribe)
+                for tick in WS.ticks:
+                    history = candle_data(tick["instrument_token"])
+                    print(history)
+        except KeyboardInterrupt:
+            # if keyboard interrupt stop the websocket
+            WS.kws.on_close
+            __import__("sys").exit(1)
+        except Exception as e:
+            print(e)
+        finally:
+            __import__("time").sleep(1)
+
+
+def main():
+    API = init()
+    # what is the universe we are going to trade today
+    lst_of_exchsym = ["NSE:SBIN", "NSE:RELIANCE", "NSE:INFY", "NSE:ICICIBANK"]
+
+    # get more info of the universe
+    SYM = Symbol("NSE", "", "")
+    dct_of_token = SYM.tokens(lst_of_exchsym)
+    subscribe = list(dct_of_token.values())
+
+    # initialize websocket
+    WS = Wsocket(API.kite, subscribe)
+    run(WS)
+
+
+main()

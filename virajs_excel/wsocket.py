@@ -25,8 +25,7 @@ class Wsocket:
     def on_ticks(self, ws, ticks):
         # Callback to receive ticks.
         if ticks:
-            print(ticks)
-        # self.ticks = ticks
+            self.ticks = ticks
 
     def on_connect(self, ws, response):
         # Callback on successful connect.

@@ -35,7 +35,7 @@ dct_sym = {
 }
 
 
-class Symbols:
+class Symbol:
     """
     Class to get symbols from finvasia
 
