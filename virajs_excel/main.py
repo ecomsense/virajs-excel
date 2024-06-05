@@ -19,7 +19,7 @@ def init():
         return get_zerodha(O_CNFG["zerodha"], S_DATA)
 
 
-def candle_data(token):
+def candle_data(API, token):
     FM = (
         pdlm.now()
         .subtract(days=2)
@@ -43,14 +43,14 @@ def candle_data(token):
     return lst
 
 
-def run(WS):
+def run(API, WS):
     # initiate ws and get quote
     while True:
         try:
             if WS.kws.is_connected():
                 # WS.kws.set_mode(WS.kws.MODE_LTP, subscribe)
                 for tick in WS.ticks:
-                    history = candle_data(tick["instrument_token"])
+                    history = candle_data(API, tick["instrument_token"])
                     print(history)
         except KeyboardInterrupt:
             # if keyboard interrupt stop the websocket
@@ -74,7 +74,7 @@ def main():
 
     # initialize websocket
     WS = Wsocket(API.kite, subscribe)
-    run(WS)
+    run(API, WS)
 
 
 main()
