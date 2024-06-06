@@ -61,36 +61,41 @@ def run(API, WS):
             __import__("time").sleep(1)
 
 
-def ltp():
-    # TODO
-    """
-    works in paid api only
-    hardcoding lastprice in bypass for time being
-    """
-    return 47295
+def ltp(API):
+    from omspy_brokers.bypass import Bypass
+
+    try:
+        # hardcoding lastprice in bypass for time being
+        if isinstance(API, Bypass):
+            return 47295
+        # works in paid api only
+        base = O_SETG["base"]
+        symbol_key = dct_sym[base]
+        exch_sym = symbol_key["exch"] + ":" + symbol_key["index"].upper()
+        logging.debug(exch_sym)
+        resp = API.kite.ltp(exch_sym)
+        return resp[exch_sym]["last_price"]
+    except Exception as e:
+        print(f"ltp: {e}")
+        print_exc()
 
 
 def main():
     try:
         API = init()
-        last_price = ltp()
+        last_price = ltp(API)
 
         # get more info of the universe
-        print(O_SETG)
-        SYM = Symbol("NFO", O_SETG["base"], O_SETG["base"]["expiry"])
-        atm = SYM.get_atm(last_price)
+        base = O_SETG["base"]
+        SYM = Symbol("NFO", base, O_SETG[base]["expiry"])
+        args = SYM.calc_atm_from_ltp(last_price)
 
-        print(atm)
-        """
         # what is the universe we are going to trade today
-        lst_of_exchsym = ["NSE:SBIN", "NSE:RELIANCE", "NSE:INFY", "NSE:ICICIBANK"]
-        dct_of_token = SYM.tokens(lst_of_exchsym)
-        subscribe = list(dct_of_token.vales())
-
+        dct_of_token = SYM.find_token_from_dump(args)
+        subscribe = list(dct_of_token.values())
         # initialize websocket
         WS = Wsocket(API.kite, subscribe)
         run(API, WS)
-        """
     except Exception as e:
         logging.error(f"main: {e}")
         print_exc()

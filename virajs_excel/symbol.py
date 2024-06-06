@@ -1,7 +1,8 @@
 import pandas as pd
 import re
 from toolkit.fileutils import Fileutils
-from typing import Dict, Optional
+from typing import List, Union
+from traceback import print_exc
 
 dct_sym = {
     "NIFTY": {
@@ -48,9 +49,6 @@ class Symbol:
     expiry : str
         Expiry
 
-    Returns
-    -------
-    None
     """
 
     def __init__(self, exchange: str, symbol: str, expiry: str):
@@ -58,44 +56,74 @@ class Symbol:
         self.symbol = symbol
         self.expiry = expiry
         self.csvfile = f"../data/{self.exchange}_symbols.csv"
-        print(self)
-        self.get_exchange_token_map()
+        self.dump_master_by_exchange()
 
-    def get_exchange_token_map(self):
-        if Fileutils().is_file_not_2day(self.csvfile):
-            url = f"https://api.kite.trade/instruments/{self.exchange}"
-            df = pd.read_csv(url)
-            # last_price is needed for bypass
-            df.drop(columns=["name"], inplace=True)
-            df.to_csv(self.csvfile, index=False)
+    def dump_master_by_exchange(self):
+        try:
+            if Fileutils().is_file_not_2day(self.csvfile):
+                url = f"https://api.kite.trade/instruments/{self.exchange}"
+                df = pd.read_csv(url)
+                df.drop(columns=["name", "last_price"], inplace=True)
+                df.to_csv(self.csvfile, index=False)
+        except Exception as e:
+            print(e)
+            print_exc()
+            SystemExit(1)
 
-    def last_price(self, exchsym):
-        df = pd.read_csv(self.csvfile)
-        if not isinstance(exchsym, list):
-            exchsym = [exchsym]
-        lst_sym = []
-        for exchsym in exchsym:
-            exch = exchsym.split(":")[0]
-            sym = exchsym.split(":")[1]
-            if exch == self.exchange:
-                lst_sym.append(sym)
-        df = df[df["tradingsymbol"].isin(lst_sym)]
-        return dict(zip(df["tradingsymbol"], df["last_price"]))
+    def find_token_from_dump(self, args: Union[List[str], int]):
+        """
+        finds token from data dir csv dump
+        parameter:
+            input: list of exchange:symbols or atm as integer
+            output: dictionary with symbol key and token as value
+        """
+        try:
+            df = pd.read_csv(self.csvfile)
+            lst = []
+            if isinstance(args, list):
+                for args in args:
+                    exch = args.split(":")[0]
+                    sym = args.split(":")[1]
+                    if exch == self.exchange:
+                        lst.append(sym)
+            elif isinstance(args, int):
+                lst.append(self.symbol + self.expiry + str(args) + "CE")
+                lst.append(self.symbol + self.expiry + str(args) + "PE")
+                for v in range(1, dct_sym[self.symbol]["depth"]):
+                    lst.append(
+                        self.symbol
+                        + self.expiry
+                        + str(args + v * dct_sym[self.symbol]["diff"])
+                        + "CE"
+                    )
+                    lst.append(
+                        self.symbol
+                        + self.expiry
+                        + str(args + v * dct_sym[self.symbol]["diff"])
+                        + "PE"
+                    )
+                    lst.append(
+                        self.symbol
+                        + self.expiry
+                        + str(args - v * dct_sym[self.symbol]["diff"])
+                        + "CE"
+                    )
+                    lst.append(
+                        self.symbol
+                        + self.expiry
+                        + str(args - v * dct_sym[self.symbol]["diff"])
+                        + "PE"
+                    )
+            else:
+                raise ValueError(f"str({args}) must be list or int")
+            df = df[df["tradingsymbol"].isin(lst)]
+            return dict(zip(df["tradingsymbol"], df["instrument_token"]))
+        except Exception as e:
+            print(f"find_token_from_dump: {e}")
+            print_exc()
+            SystemExit(1)
 
-    def tokens(self, exchsym):
-        df = pd.read_csv(self.csvfile)
-        if not isinstance(exchsym, list):
-            exchsym = [exchsym]
-        lst_sym = []
-        for exchsym in exchsym:
-            exch = exchsym.split(":")[0]
-            sym = exchsym.split(":")[1]
-            if exch == self.exchange:
-                lst_sym.append(sym)
-        df = df[df["tradingsymbol"].isin(lst_sym)]
-        return dict(zip(df["tradingsymbol"], df["instrument_token"]))
-
-    def get_atm(self, ltp) -> int:
+    def calc_atm_from_ltp(self, ltp) -> int:
         current_strike = ltp - (ltp % dct_sym[self.symbol]["diff"])
         next_higher_strike = current_strike + dct_sym[self.symbol]["diff"]
         if ltp - current_strike < next_higher_strike - ltp:
@@ -104,48 +132,6 @@ class Symbol:
 
 
 """
-    def get_tokens(self, strike):
-        df = pd.read_csv(self.csvfile)
-        lst = []
-        lst.append(self.symbol + self.expiry + "C" + str(strike))
-        lst.append(self.symbol + self.expiry + "P" + str(strike))
-        for v in range(1, dct_sym[self.symbol]["depth"]):
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "C"
-                + str(strike + v * dct_sym[self.symbol]["diff"])
-            )
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "P"
-                + str(strike + v * dct_sym[self.symbol]["diff"])
-            )
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "C"
-                + str(strike - v * dct_sym[self.symbol]["diff"])
-            )
-            lst.append(
-                self.symbol
-                + self.expiry
-                + "P"
-                + str(strike - v * dct_sym[self.symbol]["diff"])
-            )
-
-        df["Exchange"] = self.exchange
-        tokens_found = (
-            df[df["TradingSymbol"].isin(lst)]
-            .assign(tknexc=df["Exchange"] + "|" + df["Token"].astype(str))[
-                ["tknexc", "TradingSymbol"]
-            ]
-            .set_index("tknexc")
-        )
-        dct = tokens_found.to_dict()
-        return dct["TradingSymbol"]
-
     def find_closest_premium(
         self, quotes: Dict[str, float], premium: float, contains: str
     ) -> Optional[str]:
@@ -216,17 +202,3 @@ class Symbol:
             raise Exception("Option not found")
 
 """
-
-
-if __name__ == "__main__":
-    sym = Symbols("NSE", "NIFTY", "")
-    lst = [
-        "NSE:SBIN",
-        "NSE:RELIANCE",
-        "NSE:INFY",
-        "NSE:ITC",
-        "NSE:ICICIBANK",
-        "NSE:LT",
-    ]
-    dct = sym.tokens(lst)
-    print(dct)

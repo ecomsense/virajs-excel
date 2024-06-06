@@ -1,12 +1,13 @@
-from omspy_brokers.bypass import Bypass
-from toolkit.fileutils import Fileutils
+from constants import O_FUTL
 
 
 def get_bypass(dct, sec_dir):
+    from omspy_brokers.bypass import Bypass
+
     try:
         tokpath = sec_dir + dct["userid"] + ".txt"
         enctoken = None
-        if not Fileutils().is_file_not_2day(tokpath):
+        if not O_FUTL.is_file_not_2day(tokpath):
             print(f"{tokpath} modified today ... reading {enctoken}")
             with open(tokpath, "r") as tf:
                 enctoken = tf.read()
