@@ -58,6 +58,7 @@ class Symbol:
         self.symbol = symbol
         self.expiry = expiry
         self.csvfile = f"../data/{self.exchange}_symbols.csv"
+        print(self)
         self.get_exchange_token_map()
 
     def get_exchange_token_map(self):
