@@ -1,0 +1,6 @@
+broker: bypass
+base: BANKNIFTY
+BANKNIFTY:
+  exchange: NFO
+  expiry: 24612
+

@@ -2,15 +2,13 @@ from constants import O_CNFG, S_DATA, O_SETG, logging
 from toolkit.kokoo import timer
 from login import get_bypass, get_zerodha
 from wsocket import Wsocket
-from symbol import Symbol
+from symbol import Symbol, dct_sym
 import pendulum as pdlm
 import pandas as pd
 
 
-CRED = {}
-
-
 def init():
+    CRED = {}
     if O_SETG["broker"] == "bypass":
         CRED.update(O_CNFG["bypass"])
         return get_bypass(O_CNFG["bypass"], S_DATA)
@@ -64,13 +62,16 @@ def run(API, WS):
 
 def main():
     API = init()
-    # what is the universe we are going to trade today
-    lst_of_exchsym = ["NSE:SBIN", "NSE:RELIANCE", "NSE:INFY", "NSE:ICICIBANK"]
-
+     = O_SETG["base"]
+    SYM = Symbol("NSE")
+    dct = SYM.last_price()
     # get more info of the universe
-    SYM = Symbol("NSE", "", "")
+    SYM = Symbol("NFO", O_SETG["base"], O_SETG["base"]["expiry"])
+    # what is the universe we are going to trade today
+
+    lst_of_exchsym = ["NSE:SBIN", "NSE:RELIANCE", "NSE:INFY", "NSE:ICICIBANK"]
     dct_of_token = SYM.tokens(lst_of_exchsym)
-    subscribe = list(dct_of_token.values())
+    subscribe = list(dct_of_token.vales())
 
     # initialize websocket
     WS = Wsocket(API.kite, subscribe)

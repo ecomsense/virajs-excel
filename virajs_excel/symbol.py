@@ -8,28 +8,28 @@ dct_sym = {
         "diff": 50,
         "index": "Nifty 50",
         "exch": "NSE",
-        "token": "26000",
+        "token": "256265",
         "depth": 16,
     },
     "BANKNIFTY": {
         "diff": 100,
         "index": "Nifty Bank",
         "exch": "NSE",
-        "token": "26009",
+        "token": "260105",
         "depth": 25,
     },
     "MIDCPNIFTY": {
         "diff": 100,
         "index": "NIFTY MID SELECT",
         "exch": "NSE",
-        "token": "26074",
+        "token": "288009",
         "depth": 21,
     },
     "FINNIFTY": {
         "diff": 50,
         "index": "Nifty Fin Services",
         "exch": "NSE",
-        "token": "26037",
+        "token": "257801",
         "depth": 16,
     },
 }
@@ -64,8 +64,22 @@ class Symbol:
         if Fileutils().is_file_not_2day(self.csvfile):
             url = f"https://api.kite.trade/instruments/{self.exchange}"
             df = pd.read_csv(url)
-            df.drop(columns=["name", "last_price"], inplace=True)
+            # last_price is needed for bypass
+            df.drop(columns=["name"], inplace=True)
             df.to_csv(self.csvfile, index=False)
+
+    def last_price(self, exchsym):
+        df = pd.read_csv(self.csvfile)
+        if not isinstance(exchsym, list):
+            exchsym = [exchsym]
+        lst_sym = []
+        for exchsym in exchsym:
+            exch = exchsym.split(":")[0]
+            sym = exchsym.split(":")[1]
+            if exch == self.exchange:
+                lst_sym.append(sym)
+        df = df[df["tradingsymbol"].isin(lst_sym)]
+        return dict(zip(df["tradingsymbol"], df["last_price"]))
 
     def tokens(self, exchsym):
         df = pd.read_csv(self.csvfile)
