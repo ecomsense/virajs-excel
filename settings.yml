@@ -4,5 +4,5 @@ broker: bypass
 base: BANKNIFTY
 BANKNIFTY:
   exchange: NFO
-  expiry: 24612
+  expiry: "24612"
 
