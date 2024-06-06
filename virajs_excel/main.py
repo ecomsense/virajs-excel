@@ -5,6 +5,7 @@ from wsocket import Wsocket
 from symbol import Symbol, dct_sym
 import pendulum as pdlm
 import pandas as pd
+from traceback import print_exc
 
 
 def init():
@@ -60,22 +61,39 @@ def run(API, WS):
             __import__("time").sleep(1)
 
 
+def ltp():
+    # TODO
+    """
+    works in paid api only
+    hardcoding lastprice in bypass for time being
+    """
+    return 47295
+
+
 def main():
-    API = init()
-     = O_SETG["base"]
-    SYM = Symbol("NSE")
-    dct = SYM.last_price()
-    # get more info of the universe
-    SYM = Symbol("NFO", O_SETG["base"], O_SETG["base"]["expiry"])
-    # what is the universe we are going to trade today
+    try:
+        API = init()
+        last_price = ltp()
 
-    lst_of_exchsym = ["NSE:SBIN", "NSE:RELIANCE", "NSE:INFY", "NSE:ICICIBANK"]
-    dct_of_token = SYM.tokens(lst_of_exchsym)
-    subscribe = list(dct_of_token.vales())
+        # get more info of the universe
+        print(O_SETG)
+        SYM = Symbol("NFO", O_SETG["base"], O_SETG["base"]["expiry"])
+        atm = SYM.get_atm(last_price)
 
-    # initialize websocket
-    WS = Wsocket(API.kite, subscribe)
-    run(API, WS)
+        print(atm)
+        """
+        # what is the universe we are going to trade today
+        lst_of_exchsym = ["NSE:SBIN", "NSE:RELIANCE", "NSE:INFY", "NSE:ICICIBANK"]
+        dct_of_token = SYM.tokens(lst_of_exchsym)
+        subscribe = list(dct_of_token.vales())
+
+        # initialize websocket
+        WS = Wsocket(API.kite, subscribe)
+        run(API, WS)
+        """
+    except Exception as e:
+        logging.error(f"main: {e}")
+        print_exc()
 
 
 main()

@@ -94,8 +94,6 @@ class Symbol:
         df = df[df["tradingsymbol"].isin(lst_sym)]
         return dict(zip(df["tradingsymbol"], df["instrument_token"]))
 
-    """
-
     def get_atm(self, ltp) -> int:
         current_strike = ltp - (ltp % dct_sym[self.symbol]["diff"])
         next_higher_strike = current_strike + dct_sym[self.symbol]["diff"]
@@ -103,6 +101,8 @@ class Symbol:
             return int(current_strike)
         return int(next_higher_strike)
 
+
+"""
     def get_tokens(self, strike):
         df = pd.read_csv(self.csvfile)
         lst = []
