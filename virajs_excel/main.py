@@ -49,14 +49,19 @@ def run(API, WS):
             if WS.kws.is_connected():
                 # WS.kws.set_mode(WS.kws.MODE_LTP, subscribe)
                 for tick in WS.ticks:
+                    print(tick)
+                    """
                     history = candle_data(API, tick["instrument_token"])
                     print(history)
+                    """
         except KeyboardInterrupt:
             # if keyboard interrupt stop the websocket
             WS.kws.on_close
             __import__("sys").exit(1)
         except Exception as e:
-            print(e)
+            print(f"run: {e}")
+            print_exc()
+            SystemExit(1)
         finally:
             __import__("time").sleep(1)
 
@@ -93,6 +98,7 @@ def main():
         # what is the universe we are going to trade today
         dct_of_token = SYM.find_token_from_dump(args)
         subscribe = list(dct_of_token.values())
+        logging.debug("subscribe: {}".format(subscribe))
         # initialize websocket
         WS = Wsocket(API.kite, subscribe)
         run(API, WS)
