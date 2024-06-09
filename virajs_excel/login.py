@@ -47,3 +47,24 @@ def get_zerodha(fdct, sec_dir):
 
 def remove_token(tokpath):
     __import__("os").remove(tokpath)
+
+
+if __name__ == "__main__":
+    from constants import O_CNFG, O_SETG, S_DATA
+
+    CRED = {}
+    if O_SETG["broker"] == "bypass":
+        CRED.update(O_CNFG["bypass"])
+        api = get_bypass(O_CNFG["bypass"], S_DATA)
+    else:
+        CRED.update(O_CNFG["zerodha"])
+        api = get_zerodha(O_CNFG["zerodha"], S_DATA)
+
+    positions = api.positions
+    print(f"{positions=}")
+
+    orders = api.orders
+    print(f"{orders=}")
+
+    holdings = api.kite.holdings()
+    print(f"{holdings=}")
