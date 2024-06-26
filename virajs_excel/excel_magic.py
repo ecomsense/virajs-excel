@@ -237,12 +237,13 @@ def get_live():
     candle_gen_time = pdlm.now()
     order_book_refresh_time = pdlm.now()
     position_book_refresh_time = pdlm.now()
-    
+    # print(api.orders)
+    # print(api.positions)
     computed_candle_data = pd.DataFrame(columns=["time", "ltp"])
     while True:
         if pdlm.now() > order_book_refresh_time.add(seconds=2):
             orders = api.orders
-            orders = [order for order in orders.get('data',[]) if order["status"] not in ('COMPLETE', 'CANCELLED', 'REJECTED')]
+            orders = [order for order in orders if order and order.get("status","") not in ('COMPLETE', 'CANCELLED', 'REJECTED')]
             order_book_refresh_time = pdlm.now()
         if pdlm.now() > position_book_refresh_time.add(seconds=2):
             positions = api.positions
@@ -290,7 +291,7 @@ def get_live():
 
         # Table 1
         shortlisted_detail = len(bank_nifty_df[bank_nifty_df["tradingsymbol"] == symbol_in_focus]['instrument_token'].to_list())
-        if len(shortlisted_detail) == 1:
+        if shortlisted_detail == 1:
             buy_order_details = live_sheet.range(f"b{4}:e{13}").value
             buy_order_details_changed = False
             # print(buy_order_details)
@@ -383,7 +384,7 @@ def get_live():
             orders = api.orders
             orders_in_excel = [
                 [order['tradingsymbol'], order['exchange'], order['filled_quantity'], order['transaction_type'], order.get('price', 0), order.get('trigger_price', 0)] 
-                for order in orders.get('data',[]) if order["status"] not in ('COMPLETE', 'CANCELLED', 'REJECTED')]
+                for order in orders if order and order["status"] not in ('COMPLETE', 'CANCELLED', 'REJECTED')]
             order_book_refresh_time = pdlm.now()
             live_sheet.range(f"b{18}:g{29}").value = orders_in_excel
 
@@ -471,12 +472,12 @@ def get_live():
                 open_position_details_changed = True
         if open_position_details_changed:
             live_sheet.range(f"q{18}:ab{29}").value = open_position_details
-        print(open_position_details)
+        # print(open_position_details)
         if pdlm.now() > position_book_refresh_time.add(seconds=2):
             positions = api.positions
             positions_in_excel = [
                 [position['tradingsymbol'], position['exchange'], position['quantity'], position['transaction_type'], position.get('average_price', 0), "BUY"] 
-                for position in positions.get('data',{}).get('net',[])]
+                for position in positions if position]
             position_book_refresh_time = pdlm.now()
             live_sheet.range(f"q{18}:u{29}").value = positions_in_excel
 
