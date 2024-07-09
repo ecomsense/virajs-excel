@@ -14,3 +14,4 @@ pyyaml
 pendulum
 webdriver-manager
 selenium
+xlwings
