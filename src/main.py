@@ -149,8 +149,8 @@ def get_holdings():
         if holdings_df.empty:
             holdings_sheet.range("f3").font.size = 30
             holdings_sheet.range("f3").value = "No holding details found"
-        else:
-            holdings_sheet.range("a1").options(index=False, header=True).value = holdings_df
+        # else:
+            # holdings_sheet.range("a1").options(index=False, header=True).value = holdings_df
     except Exception as e:
         print(f"[{time.ctime()}] Something is Wrong while updating Holdings Sheet: {e}.")
 
@@ -743,9 +743,10 @@ def get_live():
                 # sleep
                 time.sleep(0.8)
             except Exception as e:
-                print(f'Error in get_live(): {e}')
+                shutdown = True
+                print(f'1.Error in get_live(): {e}')
     except Exception as e:
-        print(f'Error in get_live(): {e}')
+        print(f'2.Error in get_live(): {e}')
         shutdown = True
 
     # Closing Websocket before exit.
