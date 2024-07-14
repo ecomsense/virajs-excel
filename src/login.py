@@ -1,4 +1,5 @@
 from constants import O_FUTL
+from kiteconnect import KiteTicker
 
 
 def get_bypass(dct, sec_dir):
@@ -12,12 +13,11 @@ def get_bypass(dct, sec_dir):
             if enctoken:
                 with open(tokpath, "w") as tw:
                     tw.write(enctoken)
+                bypass.kite.kws = bypass.kite.kws()
                 return bypass
             print('Either Token is expired or Invalid Details entered.')
     except Exception as e:
         print(f"unable to create bypass object  {e}")
-    else:
-        return None
 
 
 def get_zerodha(fdct, sec_dir):
@@ -25,19 +25,17 @@ def get_zerodha(fdct, sec_dir):
         from omspy_brokers.zerodha import Zerodha
 
         zera = Zerodha(
-            user_id=fdct["userid"],
+            userid=fdct["userid"],
             password=fdct["password"],
             totp=fdct["totp"],
             api_key=fdct["api_key"],
-            secret=fdct["secret"],
-            tokpath=sec_dir + fdct["userid"] + ".txt",
+            secret=fdct["secret"]
         )
-        zera.authenticate()
-        if zera.enctoken: return zera
+        if zera.authenticate():
+            zera.kite.kws = KiteTicker(zera.api_key, zera.access_token)
+            return zera
     except Exception as e:
         print(f"exception while creating zerodha object {e}")
-    finally:
-        return None
 
 
 def remove_token(tokpath):

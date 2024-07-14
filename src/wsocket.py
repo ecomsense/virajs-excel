@@ -1,12 +1,13 @@
 import pendulum
 from constants import logging
+# from kiteconnect import KiteTicker
 
 
 class Wsocket:
     def __init__(self, kite, sym_tkn=None):
         self.instrument = ""
         self.ticks = []
-        self.kws = kite.kws()
+        self.kws = kite.kws
         if isinstance(sym_tkn, list):
             self.sym_tkn = sym_tkn
         else:
