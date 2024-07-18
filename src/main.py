@@ -23,13 +23,17 @@ def show_msg(err_txt, msg_type=None):
     sheet_range.value = str(err_txt)
 
 def init():
-    CRED = {}
-    if "zerodha" in O_CNFG:
-        CRED.update(O_CNFG["zerodha"])
-        return get_zerodha(O_CNFG["zerodha"], S_DATA)
-    else:
-        CRED.update(O_CNFG["bypass"])
-        return get_bypass(O_CNFG["bypass"], S_DATA)
+    broker = O_CNFG.get("broker", None)
+    if broker is not None:
+        cnfg = O_CNFG.get(broker, None)
+        if cnfg is not None:
+            print(cnfg)
+            if broker == "bypass":
+                return get_bypass(cnfg, S_DATA)
+            elif broker == "zerodha": 
+                return get_zerodha(cnfg, S_DATA)     
+            else:
+                print("cannot find the broker you mentioned in the config yml file") 
 
 
 def candle_data(API, token):
@@ -60,18 +64,6 @@ def candle_data(API, token):
         print_exc()        
     finally:
         return lst    
-
-def fetch_user():
-    try:
-        global api
-        api = init()
-        if not api: return False
-        data = api.kite.profile()
-        api.username = data.get('user_name')
-        return True
-    except Exception as e:
-        print(f"Error while fetching user profile: {e}")
-        return False
 
 def load_bank_nifty_symbol_details():
     # 1. Download file if not file not or file created is older than next day 8:30AM.
@@ -756,7 +748,7 @@ def load_excel():
 
 
 def main():
-    global WS, shutdown
+    global WS, shutdown, api
     shutdown = False
     
     try:
@@ -764,8 +756,9 @@ def main():
         # 🟢, 🛈, ℹ , 🔔, 🚀 ...
         print(f"Zerodha Excel Based Terminal program initialized")
         print(f"📌 Process id: {os.getpid()}.")
-        if fetch_user():
-            print(f"🟢 Logged in Successfully for {api.username}")
+        api = init()
+        if api:
+            print(f"🟢 Logged in Successfully")
             load_excel()
             load_bank_nifty_symbol_details()
             print("ℹ  Loaded bank nifty symbols sheet")

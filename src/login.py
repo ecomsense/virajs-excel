@@ -29,10 +29,9 @@ def get_zerodha(fdct, sec_dir):
             password=fdct["password"],
             totp=fdct["totp"],
             api_key=fdct["api_key"],
-            secret=fdct["secret"]
+            secret=fdct["secret"]            
         )
-        if zera.authenticate():
-            zera.kite.kws = KiteTicker(zera.api_key, zera.enctoken)
+        if zera.authenticate():           
             return zera
     except Exception as e:
         print(f"exception while creating zerodha object {e}")

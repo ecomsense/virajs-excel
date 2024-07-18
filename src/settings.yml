@@ -1,6 +1,5 @@
 log_level: 10
 show_log: 1
-broker: bypass
 base: BANKNIFTY
 BANKNIFTY:
   exchange: NFO

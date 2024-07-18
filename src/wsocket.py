@@ -1,13 +1,17 @@
 import pendulum
-from constants import logging
-# from kiteconnect import KiteTicker
+from constants import logging, O_CNFG
+from kiteconnect import KiteTicker
 
 
 class Wsocket:
     def __init__(self, kite, sym_tkn=None):
         self.instrument = ""
         self.ticks = []
-        self.kws = kite.kws
+        if O_CNFG["broker"] == "bypass":
+            self.kws = kite.kws()
+        else:
+            self.kws = KiteTicker(api_key=kite.api_key, access_token=kite.access_token)
+
         if isinstance(sym_tkn, list):
             self.sym_tkn = sym_tkn
         else:
