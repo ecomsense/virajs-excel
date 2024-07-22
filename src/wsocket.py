@@ -7,9 +7,14 @@ class Wsocket:
     def __init__(self, kite, sym_tkn=None):
         self.instrument = ""
         self.ticks = []
-        if O_CNFG["broker"] == "bypass":
+        is_broker = O_CNFG.get("broker", None)
+        if is_broker is None:
+            is_zerodha = O_CNFG.get("zerodha", None)
+            is_broker = "zerodha" if is_zerodha else "bypass"
+
+        if is_broker == "bypass":
             self.kws = kite.kws()
-        else:
+        elif is_broker == "zerodha":
             self.kws = KiteTicker(api_key=kite.api_key, access_token=kite.access_token)
 
         if isinstance(sym_tkn, list):
