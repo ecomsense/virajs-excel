@@ -34,6 +34,18 @@ def init():
                 return get_zerodha(cnfg, S_DATA)     
             else:
                 print("cannot find the broker you mentioned in the config yml file") 
+    else:
+        cnfg = O_CNFG.get("zerodha", None)
+        default = O_CNFG.get("bypass", None)
+        if cnfg:
+            print(cnfg)
+            return get_zerodha(cnfg, S_DATA)
+        elif default:
+            print(default)
+            return get_bypass(default, S_DATA)
+        else:
+            print("cannot find any valid broker in the config yml file")
+            __import__("sys").exit()
 
 
 def candle_data(API, token):
