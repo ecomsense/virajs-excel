@@ -13,7 +13,6 @@ def get_bypass(dct, sec_dir):
             if enctoken:
                 with open(tokpath, "w") as tw:
                     tw.write(enctoken)
-                bypass.kite.kws = bypass.kite.kws()
                 return bypass
             print('Either Token is expired or Invalid Details entered.')
     except Exception as e:
