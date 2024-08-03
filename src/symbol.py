@@ -1,36 +1,36 @@
-import pandas as pd
-import re
-from toolkit.fileutils import Fileutils
-from typing import List, Union
 from traceback import print_exc
+from typing import List, Union
+
+import pandas as pd
+from toolkit.fileutils import Fileutils
 
 dct_sym = {
     "NIFTY": {
         "diff": 50,
-        "index": "Nifty 50",
+        "trading_symbol": "Nifty 50",
         "exch": "NSE",
-        "token": "256265",
+        "instrument_token": "256265",
         "depth": 16,
     },
     "BANKNIFTY": {
         "diff": 100,
-        "index": "Nifty Bank",
+        "trading_symbol": "Nifty Bank",
         "exch": "NSE",
-        "token": "260105",
+        "instrument_token": "260105",
         "depth": 25,
     },
     "MIDCPNIFTY": {
         "diff": 100,
-        "index": "NIFTY MID SELECT",
+        "trading_symbol": "NIFTY MID SELECT",
         "exch": "NSE",
-        "token": "288009",
+        "instrument_token": "288009",
         "depth": 21,
     },
     "FINNIFTY": {
         "diff": 50,
-        "index": "Nifty Fin Services",
+        "trading_symbol": "Nifty Fin Services",
         "exch": "NSE",
-        "token": "257801",
+        "instrument_token": "257801",
         "depth": 16,
     },
 }
@@ -117,7 +117,11 @@ class Symbol:
             else:
                 raise ValueError(f"str({args}) must be list or int")
             df = df[df["tradingsymbol"].isin(lst)]
-            return dict(zip(df["tradingsymbol"], df["instrument_token"]))
+            #return dict(zip(df["tradingsymbol"], df["instrument_token"]))
+            # keep only required columns
+            df = df[["instrument_token", "tradingsymbol"]]
+            return df.to_dict(orient="records")
+            
         except Exception as e:
             print(f"find_token_from_dump: {e}")
             print_exc()
@@ -130,75 +134,12 @@ class Symbol:
             return int(current_strike)
         return int(next_higher_strike)
 
+if __name__ == "__main__":
+    sym = Symbol("NFO", "BANKNIFTY", "24807")
+    atm = sym.calc_atm_from_ltp(54501)
+    lst = sym.find_token_from_dump(atm)
+    print("symbols", lst)
+    lst = [dct for dct in dct_sym.values()]
+    lst = [dct["instrument_token"] for dct in lst]
+    print(lst)
 
-"""
-    def find_closest_premium(
-        self, quotes: Dict[str, float], premium: float, contains: str
-    ) -> Optional[str]:
-        contains = self.expiry + contains
-        # Create a dictionary to store symbol to absolute difference mapping
-        symbol_differences: Dict[str, float] = {}
-
-        for symbol, ltp in quotes.items():
-            if re.search(re.escape(contains), symbol):
-                difference = abs(ltp - premium)
-                symbol_differences[symbol] = difference
-
-        # Find the symbol with the lowest difference
-        closest_symbol = min(
-            symbol_differences, key=symbol_differences.get, default=None
-        )
-
-        return closest_symbol
-
-    def find_symbol_in_moneyness(self, tradingsymbol, ce_or_pe, price_type):
-        def find_strike(ce_or_pe):
-            search = self.symbol + self.expiry + ce_or_pe
-            # find the remaining string in the symbol after removing search
-            strike = re.sub(search, "", tradingsymbol)
-            return search, int(strike)
-
-        search, strike = find_strike(ce_or_pe)
-        if ce_or_pe == "C":
-            if price_type == "ITM":
-                return search + str(strike - dct_sym[self.symbol]["diff"])
-            else:
-                return search + str(strike + dct_sym[self.symbol]["diff"])
-        else:
-            if price_type == "ITM":
-                return search + str(strike + dct_sym[self.symbol]["diff"])
-            else:
-                return search + str(strike - dct_sym[self.symbol]["diff"])
-
-    def calc_straddle_value(self, atm: int, quotes: list):
-        ce = self.symbol + self.expiry + "C" + str(atm)
-        pe = self.symbol + self.expiry + "P" + str(atm)
-        return quotes[ce] + quotes[pe]
-
-    def find_option_type(self, tradingsymbol):
-        option_pattern = re.compile(rf"{self.symbol}{self.expiry}([CP])\d+")
-        match = option_pattern.match(tradingsymbol)
-        if match:
-            return match.group(1)  # Returns 'C' for call, 'P' for put
-        else:
-            return False
-
-    def find_option_by_distance(
-        self, atm: int, distance: int, c_or_p: str, dct_symbols: dict
-    ):
-        match = {}
-        if c_or_p == "C":
-            find_strike = atm + (distance * dct_sym[self.symbol]["diff"])
-        else:
-            find_strike = atm - (distance * dct_sym[self.symbol]["diff"])
-        option_pattern = self.symbol + self.expiry + c_or_p + str(find_strike)
-        for k, v in dct_symbols.items():
-            if v == option_pattern:
-                match.update({"symbol": v, "token": k.split("|")[-1]})
-                break
-        if any(match):
-            return match
-        else:
-            raise Exception("Option not found")
-
-"""

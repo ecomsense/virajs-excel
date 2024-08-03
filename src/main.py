@@ -95,7 +95,7 @@ def load_bank_nifty_symbol_details():
     nfo_symbols_df.fillna(pd.NA, inplace=True)
 
     global bank_nifty_df
-    bank_nifty_df = nfo_symbols_df
+    bank_nifty_df = nfo_symbols_df[nfo_symbols_df['tradingsymbol'].str.startswith(BASE)]
     excel_name = xw.Book(EXCEL_FILE)
     bank_nifty_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
     bank_nifty_sheet.range("a1:j5000").value = None
@@ -148,7 +148,9 @@ def get_holdings():
         holdings_sheet = excel_name.sheets("HOLDINGS")
         holdings_sheet.range("a1:aj900").font.size = 11
         holdings_sheet.range("a1:aj900").value = None
-        holdings_df = pd.DataFrame(api.kite.holdings())
+        lst  = api.kite.holdings()
+        if lst is not None and any(lst):
+            holdings_df = pd.DataFrame(api.kite.holdings())
     except Exception as e:
         print(f"[{time.ctime()}] Something is Wrong while updating Holdings Sheet: {e}.")
         return

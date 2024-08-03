@@ -1,12 +1,47 @@
-import pendulum
-from constants import logging, O_CNFG
+from symbol import dct_sym
+from typing import Dict, List
+
 from kiteconnect import KiteTicker
+
+from constants import O_CNFG, logging
+
+
+def filter_ws_keys(incoming: List[Dict]):
+    keys = ["instrument_token", "last_price"]
+    new_lst = []
+    if incoming and isinstance(incoming, list) and any(incoming):
+        for dct in incoming:
+            new_dct = {}
+            for key in keys:
+                if dct.get(key, None):
+                    new_dct[key] = dct[key]
+                    new_lst.append(new_dct)
+    return new_lst
 
 
 class Wsocket:
-    def __init__(self, kite, sym_tkn=None):
-        self.instrument = ""
+    def update_ticks(self, incoming_ticks):
+        incoming_ticks = filter_ws_keys(incoming_ticks)
+
+        for incoming_tick in incoming_ticks:
+            instrument_token = incoming_tick.get("instrument_token")
+            found = False
+
+            for tick in self.ticks:
+                if tick.get("instrument_token") == instrument_token:
+                    # Update the existing tick's last price
+                    tick["last_price"] = incoming_tick.get("last_price")
+                    found = True
+                    break
+
+            if not found:
+                # If no existing tick is found, add the new tick
+                self.ticks.append(incoming_tick)
+
+    def __init__(self, kite):
         self.ticks = []
+        lst = [dct for dct in dct_sym.values()]
+        self.sym_tkn = [dct["instrument_token"] for dct in lst]
         is_broker = O_CNFG.get("broker", None)
         if is_broker is None:
             is_zerodha = O_CNFG.get("zerodha", None)
@@ -17,10 +52,6 @@ class Wsocket:
         elif is_broker == "zerodha":
             self.kws = KiteTicker(api_key=kite.api_key, access_token=kite.access_token)
 
-        if isinstance(sym_tkn, list):
-            self.sym_tkn = sym_tkn
-        else:
-            self.sym_tkn = []
         # Assign the callbacks.
         self.kws.on_ticks = self.on_ticks
         self.kws.on_connect = self.on_connect
@@ -33,18 +64,24 @@ class Wsocket:
         # You have to use the pre-defined callbacks to manage subscriptions.
         self.kws.connect(threaded=True)
 
+
+    def ltp(self, tokens=None):
+        if tokens:
+            tokens = [dct["instrument_token"] for dct in tokens]
+            self.tokens = list(set(self.tokens + tokens))
+        return self.ticks
+
+    
     def on_ticks(self, ws, ticks):
-        # Callback to receive ticks.
-        if ticks:
-            ticks[0]['ltp'] = ticks[0].pop('last_price')
-            ticks[0].update({'time': pendulum.now()})
-            self.ticks = ticks
+        if self.tokens is not None:
+            ws.subscribe(self.tokens)
+        self.update_ticks(ticks)
 
     def on_connect(self, ws, response):
         # Callback on successful connect.
         # Subscribe to a list of instrument_tokens.
-        if self.sym_tkn:
-            ws.set_mode(ws.MODE_LTP, self.sym_tkn)
+        ws.subscribe(self.sym_tkn)
+        ws.set_mode(ws.MODE_LTP, self.sym_tkn)
 
     def on_close(self, ws, code, reason):
         # On connection close stop the main loop
@@ -66,26 +103,3 @@ class Wsocket:
     def on_noreconnect(self, ws):
         logging.info("Reconnect failed.")
 
-    def subscribe(self, tokens: list[int], mode='ltp'):
-        if isinstance(tokens, int):
-            tokens = [tokens]
-        if mode.lower() not in ('ltp', 'quote', 'full'):
-            mode = 'quote'
-        self.sym_tkn.extend(tokens)
-        self.kws.set_mode(mode, tokens)
-
-    def unsubscribe(self, tokens: list[int]):
-        if isinstance(tokens, int):
-            tokens = [tokens]
-        if self.kws.unsubscribe(tokens):
-            for t in tokens:
-                if t in self.sym_tkn: 
-                    self.sym_tkn.remove(t)
-            return True
-
-    def unsubsribe_all(self):
-        if not isinstance(self.sym_tkn, list): return
-        # Unsubscribe All tokens.
-        if self.kws.unsubscribe(self.sym_tkn):
-            self.sym_tkn = []
-            return True
