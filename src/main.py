@@ -1,16 +1,18 @@
-import xlwings as xw
-from constants import O_CNFG, S_DATA, logging
-from toolkit.kokoo import timer
-from datetime import datetime as dtime, timezone
-from login import get_bypass, get_zerodha
-from wsocket import Wsocket
-import pendulum as pdlm
-import pandas as pd
-from traceback import print_exc
-from threading import Thread
 import os
 import time
+from datetime import datetime as dtime
+from datetime import timezone
+from threading import Thread
+from traceback import print_exc
 
+import pandas as pd
+import pendulum as pdlm
+import xlwings as xw
+from toolkit.kokoo import timer
+
+from constants import O_CNFG, O_FUTL, O_SETG, S_DATA, logging
+from login import get_bypass, get_zerodha
+from wsocket import Wsocket
 
 EXCEL_FILE_NAME = "VirajExcel.xlsm"
 EXCEL_FILE = S_DATA + EXCEL_FILE_NAME
@@ -79,31 +81,21 @@ def candle_data(API, token):
 
 def load_bank_nifty_symbol_details():
     # 1. Download file if not file not or file created is older than next day 8:30AM.
-    fpath = S_DATA + "NFO_symbols.csv"
-    df = None
-    if os.path.exists(fpath): 
-        ttm = dtime.now(timezone.utc)
-        ftm = dtime.fromtimestamp(os.path.getctime(fpath), timezone.utc)
-        # Deleting old symbol file. 
-        if(ftm.date() != ttm.date() and ttm.hour > 2):
-            os.remove(fpath)
-    
-    if not os.path.exists(fpath):
+    setg = O_SETG[O_SETG["base"]]
+    exchange = setg["exchange"]
+    fpath = S_DATA + f"{exchange}_symbols.csv"
+    if O_FUTL.is_file_not_2day(fpath):
         # Download file & save it.
-        url = "https://api.kite.trade/instruments/NFO"
+        url = f"https://api.kite.trade/instruments/{exchange}"
         print("Downloading & Saving Symbol file.")
         df = pd.read_csv(url, on_bad_lines="skip")
         df.fillna(pd.NA, inplace=True)
         df.to_csv(fpath, index=False)
-        
-    if df is None:
-        nfo_symbols_df = pd.read_csv(fpath, on_bad_lines="skip")
-        nfo_symbols_df.fillna(pd.NA, inplace=True)
-    else:
-        nfo_symbols_df = df
+    nfo_symbols_df = pd.read_csv(fpath, on_bad_lines="skip")
+    nfo_symbols_df.fillna(pd.NA, inplace=True)
 
     global bank_nifty_df
-    bank_nifty_df = nfo_symbols_df[nfo_symbols_df['tradingsymbol'].str.startswith('BANKNIFTY')]
+    bank_nifty_df = nfo_symbols_df
     excel_name = xw.Book(EXCEL_FILE)
     bank_nifty_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
     bank_nifty_sheet.range("a1:j5000").value = None
