@@ -1,9 +1,10 @@
 import xlwings as xw
-from constants import O_CNFG, S_DATA, logging
+from constants import O_CNFG, O_SETG, S_DATA, logging
 from toolkit.kokoo import timer
 from datetime import datetime as dtime, timezone
 from login import get_bypass, get_zerodha
 from wsocket import Wsocket
+from optionChain import OptionChain
 import pendulum as pdlm
 import pandas as pd
 from traceback import print_exc
@@ -77,9 +78,9 @@ def candle_data(API, token):
     finally:
         return lst    
 
-def load_bank_nifty_symbol_details():
+def load_symbol_details():
     # 1. Download file if not file not or file created is older than next day 8:30AM.
-    fpath = S_DATA + "NFO_symbols.csv"
+    fpath = S_DATA + "symbols.csv"
     df = None
     if os.path.exists(fpath): 
         ttm = dtime.now(timezone.utc)
@@ -90,25 +91,79 @@ def load_bank_nifty_symbol_details():
     
     if not os.path.exists(fpath):
         # Download file & save it.
-        url = "https://api.kite.trade/instruments/NFO"
+        url = "https://api.kite.trade/instruments"
         print("Downloading & Saving Symbol file.")
         df = pd.read_csv(url, on_bad_lines="skip")
+        df = df[df.segment.isin(['INDICES', 'NFO-OPT', 'BFO-OPT'])]
+        df = df[df.exchange.isin(['NSE', 'NFO', 'BSE', 'BFO']) & df.segment.isin(['INDICES', 'NFO-OPT', 'BFO-OPT'])]
         df.fillna(pd.NA, inplace=True)
         df.to_csv(fpath, index=False)
         
+    global symbol_df
     if df is None:
-        nfo_symbols_df = pd.read_csv(fpath, on_bad_lines="skip")
-        nfo_symbols_df.fillna(pd.NA, inplace=True)
+        symbol_df = pd.read_csv(fpath, on_bad_lines="skip")
+        symbol_df.fillna(pd.NA, inplace=True)
     else:
-        nfo_symbols_df = df
+        symbol_df = df
 
-    global bank_nifty_df
-    bank_nifty_df = nfo_symbols_df[nfo_symbols_df['tradingsymbol'].str.startswith('BANKNIFTY')]
-    excel_name = xw.Book(EXCEL_FILE)
-    bank_nifty_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
-    bank_nifty_sheet.range("a1:j5000").value = None
-    bank_nifty_sheet.range("a1").options(index=False, header=True).value = bank_nifty_df
-    excel_name.save()
+    # Here, get the index from settings.
+    INDEX = O_SETG.get('base')
+    SETTINGS = O_SETG.get(INDEX)
+
+    # checking is Index available or not?
+    if not INDEX or INDEX not in INDEX_MAP:
+        print("You can't trade without telling the index to trade in settings.yml file.")
+        # Can use terminal but can't trade because if no symbol data found to tradeIn.
+        return
+
+    if SETTINGS:
+        depth = SETTINGS.get('depth')
+    else:
+        depth = None
+
+    
+    index_token = symbol_df[symbol_df.tradingsymbol == INDEX_MAP.get(INDEX)].instrument_token.tolist()
+    if len(index_token) == 0:
+        index_token = None
+        print(f"Can't find InstrumentToken to subscribe {INDEX}.")
+
+    # Filtering symbol by Index & 1st Expiry only. 
+    d = OptionChain(df_symbol=symbol_df, index=INDEX, indexToken=index_token, depth=depth)
+    optdf = d.symbols
+    
+    # Subscribing Index
+    if index_token:
+        index_token = index_token[0]
+        # Subscribing Index.
+        WS.subscribe(tokens=[index_token])
+        # Getting, LTP of the index.
+        ltp = WS.ltp_store.get_ltp(index_token)
+        stt = time.time()
+        while not(ltp or shutdown):
+            ltp = WS.ltp_store.get_ltp(index_token)
+            if stt > stt+5:
+                print("Can't get ltp to Calculate ATM Strike, Leaving it.")
+                break
+            if ltp:
+                print(f'Found LTP of {INDEX}: {ltp}.')
+            timer(1)
+        
+        # Loading symbol data nearer to ATM strike only.
+        if ltp:
+            optdf = d.build_option_strikes(ltp=ltp.ltp)
+
+
+    # Making ExcelBook global.
+    EXCEL_BOOK = xw.Book(EXCEL_FILE)
+    sym_sheet = EXCEL_BOOK.sheets("SYMBOL_DETAILS")
+    sym_sheet.range("A1:O200").value = None
+    # Saving Data To Symbol Sheet.
+    sym_sheet.range("A1").options(index=False, header=True).value = optdf
+    symbol_df = optdf
+    
+    # saving symbol data.
+    EXCEL_BOOK.save()
+    print(f"ℹ  Loaded {INDEX} Symbols data in SYMBOL sheet")
 
 
 def get_orders(orders=None):
@@ -200,19 +255,19 @@ def get_funds():
 def get_historical_low_candle():
     try:
         data = candle_data(api, instrument_token)[::-1]
-        data_to_return = ['-','-','-','-','-', '-']
+        data_ret = [['-','-','-','-','-', '-'], ['-','-','-','-','-', '-']]
         if data:
             for i, candle in enumerate(data):
-                if i >= 6:
-                    break
-                data_to_return[i] = candle.get('low','-')
-        return data_to_return
+                if i >= 6: break
+                data_ret[0][i] = candle.get('date', '-')
+                data_ret[1][i] = candle.get('low', '-')
+        return data_ret
     except Exception as e:
         show_msg(e)
         print_exc()
     
 def get_manual_low_candle(computed_candle_data):
-    df =computed_candle_data.copy()
+    df = computed_candle_data.copy()
     df['time'] = pd.to_datetime(df['time'])
     df.set_index('time', inplace=True)
     ohlc_df = df.resample('1min').agg({'ltp': 'ohlc'})
@@ -323,6 +378,43 @@ def update_sheet_data(excel):
     timer(0.5)
     
 
+INDEX_MAP = {
+    'NIFTY': 'NIFTY 50',
+    'FINNIFTY': 'NIFTY FIN SERVICE',
+    'BANKNIFTY': 'NIFTY BANK',
+    'MIDCPNIFTY':'NIFTY MIDCAP 100',
+    'SENSEX': 'SENSEX',
+    'BANKEX': 'BANKEX',
+}
+
+def option_chain_ltp():
+    EXCEL_BOOK = xw.Book(EXCEL_FILE)
+    sym_sheet = EXCEL_BOOK.sheets('SYMBOL_DETAILS')
+    if sym_sheet:
+        ltp_column = sym_sheet.range('E2').expand('down')
+    else:
+        print(f'Cant load excel sheet: SYMBOL, {sym_sheet}')
+    
+
+    # Getting all tokens from symbol list & subscribing them.
+    token_strikes = symbol_df.instrument_token.tolist()
+    WS.subscribe(tokens=token_strikes)
+
+    # Now, updating Last_price column regularly.
+    while not shutdown:
+        dltp = []
+        for i in symbol_df.itertuples():
+            ltp = WS.ltp_store.get_ltp(i.instrument_token)
+            if ltp: ltp = ltp.ltp
+            else: ltp = '-'
+            dltp.append([ltp])
+        # Updating data in Excel.
+        ltp_column.value = dltp
+        # Time to sleep
+        ttm = 1
+        time.sleep(ttm)
+
+
 def get_live():
     """
     READY - 1
@@ -342,7 +434,6 @@ def get_live():
     
     while not shutdown:
         try:            
-            computed_candle_data = pd.DataFrame()
             # To Update Data in sheets...
             update_sheet_data(excel_name)
 
@@ -381,17 +472,15 @@ def get_live():
             if (symbol_in_excel is not None and symbol_in_focus != symbol_in_excel):
                 symbol_in_focus = symbol_in_excel
                 try:
-                    fdf = bank_nifty_df[bank_nifty_df.tradingsymbol == symbol_in_excel].reset_index(drop=True).head(1)
-                    # Unsubscribing Unnecessary Old Symbols.
-                    WS.unsubsribe_all()
+                    fdf = symbol_df[symbol_df.tradingsymbol == symbol_in_excel].reset_index(drop=True).head(1)
                     if fdf.empty:
                         print(f"Wrong Symbol: {symbol_in_excel}")
                         live_sheet.range("G6:V6").value = None
-                        symbol_in_focus = WS.ticks = None
+                        symbol_in_focus = None
                         continue
                     print(f"Detected new symbol: {symbol_in_focus}")
                     instrument_token = int(fdf.instrument_token[0])
-                    # Subscribing New Symbol.
+                    # Subscribing New Symbol. 
                     WS.subscribe(instrument_token)
                     print(f"[{time.ctime()}] Subscribed to Token: {instrument_token} ({symbol_in_focus}).")
                     # Filling Some Infos.
@@ -403,55 +492,33 @@ def get_live():
                     live_sheet.range("E3").value = str(strike)
                     live_sheet.range("G6").value = str(fdf.expiry[0])
                     live_sheet.range("H6").value = instrument_token
-                    live_sheet.range("K6:P6").value = live_sheet.range("Q6:V6").value = get_historical_low_candle()
+                    live_sheet.range("K5:P6").value = live_sheet.range("Q5:V6").value = get_historical_low_candle()
                     delay_candle_set_time = pdlm.now()
-                    computed_candle_data = pd.DataFrame(columns=["time", "ltp"])
                 except Exception as e:
                     msg = f"[{time.ctime()}] Error : {e}"
                     show_msg(msg)
                     print_exc()
                    
-                    
-            
             # Tick Processing
-            if WS.ticks and symbol_in_focus is not None:
-                tick = WS.ticks[0]
+            tick = WS.ltp_store.get_ltp(instrument_token)
+            if tick and symbol_in_focus is not None:
                 ltp_cell = live_sheet.range('J6')
                 live_sheet.range('J7').value = time.ctime()
                 ltick = ltp_cell.value
-                ltp = tick.get('ltp')
-                if ltick != ltp: 
-                    ltp_cell.value = ltp
-                new_row = pd.DataFrame([{'time': tick.get('time', pdlm.now()), 'ltp': ltp}])
-                if not computed_candle_data.empty:
-                    computed_candle_data = pd.concat([computed_candle_data, new_row], ignore_index=True)
-                else:
-                    computed_candle_data = new_row.copy()
-            
+                if ltick != tick.ltp:
+                    ltp_cell.value = tick.ltp
+                
                 # Candle Data Processing...
-                cad_cell1 = live_sheet.range('K6:P6')
+                cad_cell1 = live_sheet.range('K5:P6')
                 if pdlm.now() > candle_gen_time.add(minutes=1):
-                    existing_value = cad_cell1.value
-                    if not computed_candle_data.empty:
-                        print("computing new 1min candle")
-                        new_values = get_manual_low_candle(computed_candle_data)
-                        for val in new_values[::-1]:
-                            existing_value.insert(0, val)
-                        existing_value = existing_value[:6]
-                        cad_cell1.value = existing_value
-                    else:
-                        print(f"Data is empty can't compute Candle.")
+                    print(f"[{time.ctime()}] Fetching new 1min candle")
+                    cad_cell1.value = get_historical_low_candle()
                     candle_gen_time = pdlm.now()
 
                 if pdlm.now() > delay_candle_set_time.add(minutes=1, seconds=15):
                     print(f"[{time.ctime()}] refreshing 1min candle with 15s delay")
-                    live_sheet.range('Q6:V6').value = cad_cell1.value
-                    delay_candle_set_time = pdlm.now()
-
-
-            elif not WS.ticks and symbol_in_focus is not None:
-                # print('No tick found...')
-                pass
+                    live_sheet.range('Q5:V6').value = cad_cell1.value
+                    delay_candle_set_time = candle_gen_time
 
 
             # Table 1: To Place Requested Orders.
@@ -713,7 +780,6 @@ def get_live():
     while WS.kws.is_connected():
         timer(0.5)
     print(f"[{time.ctime()}] Closing the program...")
-    excel_name.close()
 
 
 def StartThread():
@@ -721,7 +787,7 @@ def StartThread():
         # Define the threads and put them in an array
         global threads
         threads = []
-        target = (get_live, get_orders, get_positions, get_holdings, get_funds)
+        target = (get_live, get_orders, get_positions, get_holdings, get_funds, option_chain_ltp)
         for t in target:
             thread = Thread(target=t)
             thread.start()
@@ -743,13 +809,14 @@ def clear_live_data():
     live_sheet.range("C22:H500").value = None
     # Clearing Open positions data
     live_sheet.range("R22:V500").value = None
+    print("ℹ  Cleared data in live sheet")
 
 
-def load_excel():
+def check_excel():
     # 1. checks for excel file in data folder.
     if not os.path.exists(EXCEL_FILE):
         if not os.path.exists(EXCEL_FILE_NAME):
-            print('Excel file not found, i think you have deleted it, Contact The Creator.')
+            print('Excel file not found, i think you have deleted it, contact Developer.')
             exit(1)
         # move file to data folder.
         try:
@@ -771,18 +838,16 @@ def main():
         api = init()
         if api:
             print(f"🟢 Logged in Successfully")
-            load_excel()
-            load_bank_nifty_symbol_details()
-            print("ℹ  Loaded bank nifty symbols sheet")
-            clear_live_data()
-            print("ℹ  Cleared data in live sheet")
-            
-            WS = Wsocket(api.kite)
+            WS = Wsocket(api)
             # Some time required to initialize ws connection.
             while not WS.kws.is_connected():
                 timer(1)
             print("🟢 Connected to WebSocket...")
             print("🚀 Enjoy the automation...")
+            check_excel()
+            load_symbol_details()
+            clear_live_data()
+            # Starting functions in New Threads...
             StartThread()
 
             while True:
