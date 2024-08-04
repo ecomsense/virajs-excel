@@ -239,7 +239,7 @@ def get_order_id_for_position(order_details):
     return orders_to_cancel
 
 
-def fetch_orders(status=None, update=False):
+def fetch_orders(api, status=None, update=False):
     try:
         global orders
         if update: orders = api.orders
@@ -328,7 +328,7 @@ def update_sheet_data(api):
             orders_sheet = excel_name.sheets("ORDERS")
             orders_sheet.range("a1:aj900").font.size = 11
             orders_sheet.range("a1:aj900").value = None
-            if not orders: orders = fetch_orders(update=True)
+            if not orders: orders = fetch_orders(api, update=True)
             orders_df = pd.DataFrame(orders)
         except Exception as e:
             print(f"[{time.ctime()}] Something is Wrong while updating Orders Sheet: {e}.")
@@ -384,7 +384,7 @@ def get_live(WS, api):
 
             # To update Orders Data & Table 3 - Open Orders.
             if pdlm.now() > order_book_refresh_time.add(seconds=2):
-                oders = fetch_orders(status='open', update=True)
+                oders = fetch_orders(api, status='open', update=True)
                 if oders is not None:
                     # symbol, exchange, filled/qty, side, price, triggerPrice. 
                     orders_to_excel = [
