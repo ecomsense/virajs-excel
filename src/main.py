@@ -7,7 +7,6 @@ from traceback import print_exc
 import pandas as pd
 import pendulum as pdlm
 import xlwings as xw
-from _typeshed import ExcInfo
 from toolkit.kokoo import timer
 
 from constants import O_CNFG, O_FUTL, O_SETG, S_DATA, logging
