@@ -1,6 +1,7 @@
 import os
 import time
-from symbol import Symbol, dct_sym
+from datetime import datetime as dtime
+from datetime import timezone
 from threading import Thread
 from traceback import print_exc
 
@@ -15,34 +16,6 @@ from wsocket import Wsocket
 
 EXCEL_FILE_NAME = "VirajExcel.xlsm"
 EXCEL_FILE = S_DATA + EXCEL_FILE_NAME
-excel_name = xw.Book(EXCEL_FILE)
-
-def clear_live_data():
-    live_sheet = excel_name.sheets("LIVE")
-    # Clearing Candle data
-    live_sheet.range("B3:C3").value = None
-    live_sheet.range("E3").value = None
-    live_sheet.range("G6:H6").value = None
-    live_sheet.range("J6:V6").value = None
-    # Clearing Open Order data # TODO: make this dynamic or 
-    live_sheet.range("C22:H500").value = None
-    # Clearing Open positions data
-    live_sheet.range("R22:V500").value = None
-    print("ℹ  Cleared data in live sheet")
-
-
-def copy_excel_if_not_found():
-    # 1. checks for excel file in data folder.
-    if not os.path.exists(EXCEL_FILE):
-        if not os.path.exists(EXCEL_FILE_NAME):
-            print('Excel file not found, i think you have deleted it, Contact The Creator.')
-            exit(1)
-        # move file to data folder.
-        try:
-            shutil = __import__('shutil')
-            shutil.copy2(EXCEL_FILE_NAME, EXCEL_FILE)
-        except Exception as e:
-            print(f'[{time.ctime()}] Error while copying excel file to data folder: {e}')
 
 def show_msg(err_txt, msg_type=None):   
     excel_name = xw.Book(EXCEL_FILE)
@@ -51,27 +24,7 @@ def show_msg(err_txt, msg_type=None):
     sheet_range.color =  (146, 208, 80) if msg_type else (234, 99, 70) 
     sheet_range.value = str(err_txt)
 
-def save_symbol_sheet(WS):
-    resp = None
-    while not resp:
-        resp = WS.ltp()
-        print("Waiting for data...")
-        timer(1)
-    BASE = O_SETG["base"]
-    setg = O_SETG[BASE]
-    instrument_token = dct_sym[BASE]["instrument_token"]
-    sym = Symbol(setg["exchange"], BASE, setg["expiry"])
-    ltp = [dct["last_price"] for dct in resp if dct["instrument_token"] == instrument_token][0]
-    atm = sym.calc_atm_from_ltp(ltp)
-    lst = sym.find_token_from_dump(atm)
-    df = pd.DataFrame(lst)
-    symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
-    symbol_sheet.range("a1").options(index=False, header=True).value = df
-    symbol_sheet.save()
-    _ = WS.ltp(lst)
-    print("symbols", lst)
-
-def get_kite():
+def init():
     broker = O_CNFG.get("broker", None)
     if broker is not None:
         cnfg = O_CNFG.get(broker, None)
@@ -156,6 +109,63 @@ def get_tokens_for_subscribing():
     excel_name.save()
 
 
+def get_orders(orders=None):
+    try:
+        excel_name = xw.Book(EXCEL_FILE)
+        orders_sheet = excel_name.sheets("ORDERS")
+        orders_sheet.range("a1:aj900").font.size = 11
+        orders_sheet.range("a1:aj900").value = None
+        if not orders: orders = fetch_orders(update=True)
+        orders_df = pd.DataFrame(orders)
+    except Exception as e:
+        print(f"[{time.ctime()}] Something is Wrong while updating Orders Sheet: {e}.")
+        return
+    if orders_df.empty:
+        cell = orders_sheet.range("f3")
+        cell.font.size = 30
+        cell.value = "No order details found"
+    else:
+        orders_df.drop(columns=['meta'], inplace=True)
+        cell = orders_sheet.range("a1").options(index=False, header=True)
+        cell.value = orders_df
+        
+
+def get_positions():
+    try:
+        excel_name = xw.Book(EXCEL_FILE)
+        positions_sheet = excel_name.sheets("POSITIONS")
+        positions_sheet.range("a1:aj900").font.size = 11
+        positions_sheet.range("a1:aj900").value = None
+        positions_df = pd.DataFrame(api.positions)
+    except Exception as e:
+        print(f"[{time.ctime()}] Something is Wrong while updating Positions Sheet: {e}.")
+        return
+    if positions_df.empty:
+        cell = positions_sheet.range("f3")
+        cell.font.size = 30
+        cell.value = "No position details found"
+    else:
+        cell = positions_sheet.range("a1").options(index=False, header=True)
+        cell.value = positions_df
+
+def get_holdings():
+    try:
+        excel_name = xw.Book(EXCEL_FILE)
+        holdings_sheet = excel_name.sheets("HOLDINGS")
+        holdings_sheet.range("a1:aj900").font.size = 11
+        holdings_sheet.range("a1:aj900").value = None
+        lst  = api.kite.holdings()
+        if lst is not None and any(lst):
+            holdings_df = pd.DataFrame(api.kite.holdings())
+    except Exception as e:
+        print(f"[{time.ctime()}] Something is Wrong while updating Holdings Sheet: {e}.")
+        return
+    if holdings_df.empty:
+        holdings_sheet.range("f3").font.size = 30
+        holdings_sheet.range("f3").value = "No holding details found"
+    else:
+        holdings_sheet.range("a1").options(index=False, header=True).value = holdings_df
+
 def fix_fund_df(fund_json):
     output = []
     for k, v in fund_json.items():
@@ -170,8 +180,24 @@ def fix_fund_df(fund_json):
         output.append(o)
     return pd.DataFrame(output)
 
+def get_funds():
+    try:
+        excel_name = xw.Book(EXCEL_FILE)
+        funds_sheet = excel_name.sheets("FUNDS")
+        funds_sheet.range("a1:z50").font.size = 11
+        funds_sheet.range("a1:z50").value = None
+        funds_df = pd.DataFrame(fix_fund_df(api.kite.margins()))
+    except Exception as e:
+        print(f"[{time.ctime()}] Something is Wrong while updating Funds Sheet: {e}.")
+        return
+    if funds_df.empty:
+        funds_sheet.range("f3").font.size = 30
+        funds_sheet.range("f3").value = "No funding details found"
+    else:
+        funds_sheet.range("a1").options(index=False, header=True).value = funds_df
 
-def get_historical_low_candle(api):
+
+def get_historical_low_candle():
     try:
         data = candle_data(api, instrument_token)[::-1]
         data_to_return = ['-','-','-','-','-', '-']
@@ -189,8 +215,8 @@ def get_manual_low_candle(computed_candle_data):
     df =computed_candle_data.copy()
     df['time'] = pd.to_datetime(df['time'])
     df.set_index('time', inplace=True)
-    ohlc_df = df.resample('1min').agg({'last_price': 'ohlc'})
-    return ohlc_df[('last_price', 'low')].tolist()
+    ohlc_df = df.resample('1min').agg({'ltp': 'ohlc'})
+    return ohlc_df[('ltp', 'low')].tolist()
 
 
 def get_order_id(order_details):
@@ -270,76 +296,8 @@ def fetch_positions(status=None, update=False):
         print(f"Error while getting Positions: {e}.")
 
 
-def update_sheet_data(api):
-    def get_funds():
-        try:
-            funds_sheet = excel_name.sheets("FUNDS")
-            funds_sheet.range("a1:z50").font.size = 11
-            funds_sheet.range("a1:z50").value = None
-            funds_df = pd.DataFrame(fix_fund_df(api.kite.margins()))
-        except Exception as e:
-            print(f"[{time.ctime()}] Something is Wrong while updating Funds Sheet: {e}.")
-            return
-        if funds_df.empty:
-            funds_sheet.range("f3").font.size = 30
-            funds_sheet.range("f3").value = "No funding details found"
-        else:
-            funds_sheet.range("a1").options(index=False, header=True).value = funds_df
-
-    def get_holdings():
-        try:
-            holdings_sheet = excel_name.sheets("HOLDINGS")
-            holdings_sheet.range("a1:aj900").font.size = 11
-            holdings_sheet.range("a1:aj900").value = None
-            lst  = api.kite.holdings()
-            if lst is not None and any(lst):
-                holdings_df = pd.DataFrame(lst)
-                if holdings_df.empty:
-                    holdings_sheet.range("f3").font.size = 30
-                    holdings_sheet.range("f3").value = "No holding details found"
-                else:
-                    holdings_sheet.range("a1").options(index=False, header=True).value = holdings_df
-        except Exception as e:
-            print(f"[{time.ctime()}] Something is Wrong while updating Holdings Sheet: {e}.")
-            return
-
-    def get_positions():
-        try:
-            positions_sheet = excel_name.sheets("POSITIONS")
-            positions_sheet.range("a1:aj900").font.size = 11
-            positions_sheet.range("a1:aj900").value = None
-            positions_df = pd.DataFrame(api.positions)
-        except Exception as e:
-            print(f"[{time.ctime()}] Something is Wrong while updating Positions Sheet: {e}.")
-            return
-        if positions_df.empty:
-            cell = positions_sheet.range("f3")
-            cell.font.size = 30
-            cell.value = "No position details found"
-        else:
-            cell = positions_sheet.range("a1").options(index=False, header=True)
-            cell.value = positions_df
-
-    def get_orders(orders=None):
-        try:
-            orders_sheet = excel_name.sheets("ORDERS")
-            orders_sheet.range("a1:aj900").font.size = 11
-            orders_sheet.range("a1:aj900").value = None
-            if not orders: orders = fetch_orders(update=True)
-            orders_df = pd.DataFrame(orders)
-        except Exception as e:
-            print(f"[{time.ctime()}] Something is Wrong while updating Orders Sheet: {e}.")
-            return
-        if orders_df.empty:
-            cell = orders_sheet.range("f3")
-            cell.font.size = 30
-            cell.value = "No order details found"
-        else:
-            orders_df.drop(columns=['meta'], inplace=True)
-            cell = orders_sheet.range("a1").options(index=False, header=True)
-            cell.value = orders_df
-
-    name = excel_name.sheets.active.name
+def update_sheet_data(excel):
+    name = excel.sheets.active.name
     sheets = ("FUNDS", "HOLDINGS", "POSITIONS", "ORDERS")
     if name not in sheets: return
     lname = DATA.get('lname')
@@ -362,22 +320,31 @@ def update_sheet_data(api):
     elif name == sheets[3]:
         get_orders()
 
+    timer(0.5)
     
 
-def get_live(WS, api):
-    global symbol_in_focus, instrument_token, orders, positions, DATA
-    symbol_in_focus = None
+def get_live():
+    """
+    READY - 1
+    ORDER - 0
+    """
+    global WS, symbol_in_focus, instrument_token, orders, positions, DATA
     DATA = {}
     orders = positions = []
+    excel_name = xw.Book(EXCEL_FILE)
     live_sheet = excel_name.sheets("LIVE")
-    delay_candle_set_time =  candle_gen_time =  order_book_refresh_time =  position_book_refresh_time = pdlm.now()
+    symbol_in_focus = None
+    delay_candle_set_time = pdlm.now()
+    candle_gen_time = pdlm.now()
+    order_book_refresh_time = pdlm.now()
+    position_book_refresh_time = pdlm.now()
     show_msg("HAPPY TRADING", "success")
     
-    while True:
+    while not shutdown:
         try:            
             computed_candle_data = pd.DataFrame()
             # To Update Data in sheets...
-            update_sheet_data(api)
+            update_sheet_data(excel_name)
 
             # To update Orders Data & Table 3 - Open Orders.
             if pdlm.now() > order_book_refresh_time.add(seconds=2):
@@ -408,13 +375,15 @@ def get_live(WS, api):
                     live_sheet.range("R22:V33").value = pos_to_excel
 
 
-            # Table 2: To Update last_price & candle data.
+
+            # Table 2: To Update ltp & candle data.
             symbol_in_excel = live_sheet.range("I6").value
             if (symbol_in_excel is not None and symbol_in_focus != symbol_in_excel):
                 symbol_in_focus = symbol_in_excel
                 try:
                     fdf = bank_nifty_df[bank_nifty_df.tradingsymbol == symbol_in_excel].reset_index(drop=True).head(1)
                     # Unsubscribing Unnecessary Old Symbols.
+                    WS.unsubsribe_all()
                     if fdf.empty:
                         print(f"Wrong Symbol: {symbol_in_excel}")
                         live_sheet.range("G6:V6").value = None
@@ -422,8 +391,8 @@ def get_live(WS, api):
                         continue
                     print(f"Detected new symbol: {symbol_in_focus}")
                     instrument_token = int(fdf.instrument_token[0])
-                    """
                     # Subscribing New Symbol.
+                    WS.subscribe(instrument_token)
                     print(f"[{time.ctime()}] Subscribed to Token: {instrument_token} ({symbol_in_focus}).")
                     # Filling Some Infos.
                     live_sheet.range("B3").value = str(fdf.lot_size[0])
@@ -433,11 +402,10 @@ def get_live(WS, api):
                     else: strike = f"{fdf.strike[0]} {itmType}"
                     live_sheet.range("E3").value = str(strike)
                     live_sheet.range("G6").value = str(fdf.expiry[0])
-                    """
                     live_sheet.range("H6").value = instrument_token
-                    live_sheet.range("K6:P6").value = live_sheet.range("Q6:V6").value = get_historical_low_candle(api)
+                    live_sheet.range("K6:P6").value = live_sheet.range("Q6:V6").value = get_historical_low_candle()
                     delay_candle_set_time = pdlm.now()
-                    computed_candle_data = pd.DataFrame(columns=["time", "last_price"])
+                    computed_candle_data = pd.DataFrame(columns=["time", "ltp"])
                 except Exception as e:
                     msg = f"[{time.ctime()}] Error : {e}"
                     show_msg(msg)
@@ -446,7 +414,19 @@ def get_live(WS, api):
                     
             
             # Tick Processing
-            if symbol_in_focus is not None:
+            if WS.ticks and symbol_in_focus is not None:
+                tick = WS.ticks[0]
+                ltp_cell = live_sheet.range('J6')
+                live_sheet.range('J7').value = time.ctime()
+                ltick = ltp_cell.value
+                ltp = tick.get('ltp')
+                if ltick != ltp: 
+                    ltp_cell.value = ltp
+                new_row = pd.DataFrame([{'time': tick.get('time', pdlm.now()), 'ltp': ltp}])
+                if not computed_candle_data.empty:
+                    computed_candle_data = pd.concat([computed_candle_data, new_row], ignore_index=True)
+                else:
+                    computed_candle_data = new_row.copy()
             
                 # Candle Data Processing...
                 cad_cell1 = live_sheet.range('K6:P6')
@@ -467,6 +447,11 @@ def get_live(WS, api):
                     print(f"[{time.ctime()}] refreshing 1min candle with 15s delay")
                     live_sheet.range('Q6:V6').value = cad_cell1.value
                     delay_candle_set_time = pdlm.now()
+
+
+            elif not WS.ticks and symbol_in_focus is not None:
+                # print('No tick found...')
+                pass
 
 
             # Table 1: To Place Requested Orders.
@@ -504,6 +489,7 @@ def get_live(WS, api):
 
                         # It will reset the button.
                         row[3].value = 'READY'
+
 
 
             # Table 3: To Modify Open Orders.
@@ -723,41 +709,100 @@ def get_live(WS, api):
             
 
     # Closing Websocket before exit.
+    WS.kws.close()
+    while WS.kws.is_connected():
+        timer(0.5)
     print(f"[{time.ctime()}] Closing the program...")
     excel_name.close()
 
 
+def StartThread():
+    try:
+        # Define the threads and put them in an array
+        global threads
+        threads = []
+        target = (get_live, get_orders, get_positions, get_holdings, get_funds)
+        for t in target:
+            thread = Thread(target=t)
+            thread.start()
+            threads.append(thread)
+    except Exception:
+        print_exc()
       
 
 
+def clear_live_data():
+    excel_name = xw.Book(EXCEL_FILE)
+    live_sheet = excel_name.sheets("LIVE")
+    # Clearing Candle data
+    live_sheet.range("B3:C3").value = None
+    live_sheet.range("E3").value = None
+    live_sheet.range("G6:H6").value = None
+    live_sheet.range("J6:V6").value = None
+    # Clearing Open Order data # TODO: make this dynamic or 
+    live_sheet.range("C22:H500").value = None
+    # Clearing Open positions data
+    live_sheet.range("R22:V500").value = None
 
-def init():
+
+def copy_excel_if_not_found():
+    # 1. checks for excel file in data folder.
+    if not os.path.exists(EXCEL_FILE):
+        if not os.path.exists(EXCEL_FILE_NAME):
+            print('Excel file not found, i think you have deleted it, Contact The Creator.')
+            exit(1)
+        # move file to data folder.
+        try:
+            shutil = __import__('shutil')
+            shutil.copy2(EXCEL_FILE_NAME, EXCEL_FILE)
+        except Exception as e:
+            print(f'[{time.ctime()}] Error while copying excel file to data folder: {e}')
+
+
+def main():
+    global WS, shutdown, api
+    shutdown = False
+    
     try:
         # Icons -
         # 🟢, 🛈, ℹ , 🔔, 🚀 ...
         print(f"Zerodha Excel Based Terminal program initialized")
         print(f"📌 Process id: {os.getpid()}.")
-        copy_excel_if_not_found()
-        api = get_kite()
+        api = init()
         if api:
             print(f"🟢 Logged in Successfully")
-            clear_live_data()
             WS = Wsocket(api.kite)
-            save_symbol_sheet(WS)
-            get_live(WS, api)
+            # Some time required to initialize ws connection.
+            while not WS.kws.is_connected():
+                timer(1)
+            print("🟢 Connected to WebSocket...")
+            copy_excel_if_not_found()
+            load_bank_nifty_symbol_details()
+            clear_live_data()
+            print("ℹ  Cleared data in live sheet")
+            
             print("🚀 Enjoy the automation...")
+            StartThread()
 
+            while True:
+                if not any(th.is_alive() for th in threads):
+                    print("Exiting the program...")
+                    WS.kws.close()
+                    while WS.kws.is_connected():
+                        timer(0.5)
+                    break
+                timer(5)
         else:
             print("Please check the API connection or Either your access token is expired!")
             print('Try Again, By Restarting your program!')
+            
     except KeyboardInterrupt:
-        print("Exiting the program...")
-        __import__("sys").exit(0)
+        shutdown = True
 
 
 if __name__ == "__main__":
     try:
-        init()
+        main()
     except Exception as e:
         print(f" excepion in main {e}")          
         print_exc()

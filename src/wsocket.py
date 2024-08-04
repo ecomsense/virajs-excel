@@ -41,14 +41,14 @@ class Wsocket:
     def __init__(self, kite):
         self.ticks = []
         lst = [dct for dct in dct_sym.values()]
-        self.sym_tkn = [dct["instrument_token"] for dct in lst]
+        self.tokens = [dct["instrument_token"] for dct in lst]
         is_broker = O_CNFG.get("broker", None)
         if is_broker is None:
             is_zerodha = O_CNFG.get("zerodha", None)
             is_broker = "zerodha" if is_zerodha else "bypass"
 
         if is_broker == "bypass":
-            self.kws = kite.kws()
+            self.kws = kite.kws
         elif is_broker == "zerodha":
             self.kws = KiteTicker(api_key=kite.api_key, access_token=kite.access_token)
 
@@ -80,8 +80,10 @@ class Wsocket:
     def on_connect(self, ws, response):
         # Callback on successful connect.
         # Subscribe to a list of instrument_tokens.
-        ws.subscribe(self.sym_tkn)
-        ws.set_mode(ws.MODE_LTP, self.sym_tkn)
+        print(response)
+        print(self.tokens)
+        ws.subscribe(self.tokens)
+        ws.set_mode(ws.MODE_LTP, self.tokens)
 
     def on_close(self, ws, code, reason):
         # On connection close stop the main loop
@@ -103,3 +105,48 @@ class Wsocket:
     def on_noreconnect(self, ws):
         logging.info("Reconnect failed.")
 
+
+if __name__ == "__main__":
+    from constants import O_CNFG, S_DATA, logging
+    from login import get_bypass, get_zerodha
+
+    def init():
+        broker = O_CNFG.get("broker", None)
+        if broker is not None:
+            cnfg = O_CNFG.get(broker, None)
+            if cnfg is not None:
+                print(cnfg)
+                if broker == "bypass":
+                    return get_bypass(cnfg, S_DATA)
+                elif broker == "zerodha": 
+                    return get_zerodha(cnfg, S_DATA)     
+                else:
+                    print("cannot find the broker you mentioned in the config yml file") 
+        else:
+            cnfg = O_CNFG.get("zerodha", None)
+            default = O_CNFG.get("bypass", None)
+            if cnfg:
+                print(cnfg)
+                return get_zerodha(cnfg, S_DATA)
+            elif default:
+                print(default)
+                return get_bypass(default, S_DATA)
+            else:
+                print("cannot find any valid broker in the config yml file")
+                __import__("sys").exit()
+
+    try: 
+        api = init() 
+        print("logged in successfully")
+        WS = Wsocket(api.kite)
+        # Some time required to initialize ws connection.
+        resp = None
+        while not resp:
+            resp = WS.ltp()
+            __import__("time").sleep(1)
+            print("Connecting...")
+        else:
+            print(resp)
+    except Exception as e:
+        print(f"main: {e}")
+        SystemExit(1)
