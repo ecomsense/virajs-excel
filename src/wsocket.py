@@ -52,6 +52,8 @@ class Wsocket:
         elif is_broker == "zerodha":
             self.kws = KiteTicker(api_key=kite.api_key, access_token=kite.access_token)
 
+        self.is_dirty = False
+
         # Assign the callbacks.
         self.kws.on_ticks = self.on_ticks
         self.kws.on_connect = self.on_connect
@@ -59,11 +61,11 @@ class Wsocket:
         self.kws.on_error = self.on_error
         self.kws.on_reconnect = self.on_reconnect
         self.kws.on_noreconnect = self.on_noreconnect
+        self.kws.on_order_update = self.on_order_update
 
         # Infinite loop on the main thread. Nothing after this will run.
         # You have to use the pre-defined callbacks to manage subscriptions.
         self.kws.connect(threaded=True)
-
 
     def ltp(self, tokens=None):
         if tokens:
@@ -71,7 +73,6 @@ class Wsocket:
             self.tokens = list(set(self.tokens + tokens))
         return self.ticks
 
-    
     def on_ticks(self, ws, ticks):
         if self.tokens is not None:
             ws.subscribe(self.tokens)
@@ -80,8 +81,6 @@ class Wsocket:
     def on_connect(self, ws, response):
         # Callback on successful connect.
         # Subscribe to a list of instrument_tokens.
-        print(response)
-        print(self.tokens)
         ws.subscribe(self.tokens)
         ws.set_mode(ws.MODE_LTP, self.tokens)
 
@@ -89,7 +88,7 @@ class Wsocket:
         # On connection close stop the main loop
         # Reconnection will not happen after executing `ws.stop()`
         ws.stop()
-        
+
     def on_error(self, ws, code, reason):
         # Callback when connection closed with error.
         logging.info(
@@ -105,6 +104,10 @@ class Wsocket:
     def on_noreconnect(self, ws):
         logging.info("Reconnect failed.")
 
+    def on_order_update(self, ws, data):
+        print(f"order updates: {data}")
+        self.is_dirty = True
+
 
 if __name__ == "__main__":
     from constants import O_CNFG, S_DATA, logging
@@ -118,10 +121,10 @@ if __name__ == "__main__":
                 print(cnfg)
                 if broker == "bypass":
                     return get_bypass(cnfg, S_DATA)
-                elif broker == "zerodha": 
-                    return get_zerodha(cnfg, S_DATA)     
+                elif broker == "zerodha":
+                    return get_zerodha(cnfg, S_DATA)
                 else:
-                    print("cannot find the broker you mentioned in the config yml file") 
+                    print("cannot find the broker you mentioned in the config yml file")
         else:
             cnfg = O_CNFG.get("zerodha", None)
             default = O_CNFG.get("bypass", None)
@@ -135,8 +138,8 @@ if __name__ == "__main__":
                 print("cannot find any valid broker in the config yml file")
                 __import__("sys").exit()
 
-    try: 
-        api = init() 
+    try:
+        api = init()
         print("logged in successfully")
         WS = Wsocket(api.kite)
         # Some time required to initialize ws connection.
