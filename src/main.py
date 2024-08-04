@@ -7,6 +7,7 @@ from traceback import print_exc
 import pandas as pd
 import pendulum as pdlm
 import xlwings as xw
+from _typeshed import ExcInfo
 from toolkit.kokoo import timer
 
 from constants import O_CNFG, O_FUTL, O_SETG, S_DATA, logging
@@ -52,24 +53,27 @@ def show_msg(err_txt, msg_type=None):
     sheet_range.value = str(err_txt)
 
 def save_symbol_sheet(WS):
-    resp = None
-    while not resp:
-        resp = WS.ltp()
-        print("Waiting for data...")
-        timer(1)
-    BASE = O_SETG["base"]
-    setg = O_SETG[BASE]
-    instrument_token = dct_sym[BASE]["instrument_token"]
-    sym = Symbol(setg["exchange"], BASE, setg["expiry"])
-    ltp = [dct["last_price"] for dct in resp if dct["instrument_token"] == instrument_token][0]
-    atm = sym.calc_atm_from_ltp(ltp)
-    lst = sym.find_token_from_dump(atm)
-    df = pd.DataFrame(lst)
-    symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
-    symbol_sheet.range("a1").options(index=False, header=True).value = df
-    symbol_sheet.save()
-    _ = WS.ltp(lst)
-    print("symbols", lst)
+    try: 
+        resp = None
+        while not resp:
+            resp = WS.ltp()
+            print("Waiting for data...")
+            timer(1)
+        BASE = O_SETG["base"]
+        setg = O_SETG[BASE]
+        instrument_token = dct_sym[BASE]["instrument_token"]
+        sym = Symbol(setg["exchange"], BASE, setg["expiry"])
+        ltp = [dct["last_price"] for dct in resp if dct["instrument_token"] == instrument_token][0]
+        atm = sym.calc_atm_from_ltp(ltp)
+        lst = sym.find_token_from_dump(atm)
+        df = pd.DataFrame(lst)
+        symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
+        symbol_sheet.range("a1").options(index=False, header=True).value = df
+        excel_name.save()
+        _ = WS.ltp(lst)
+        print("symbols", lst)
+    except Exception as e:
+        print("[{}] Error while saving symbol sheet: {}".format(time.ctime(), e))
 
 def get_kite():
     broker = O_CNFG.get("broker", None)
