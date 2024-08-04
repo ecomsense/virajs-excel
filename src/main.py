@@ -256,7 +256,7 @@ def fetch_orders(api, status=None, update=False):
         print(f"Error while getting Orders: {e}.")
 
 
-def fetch_positions(status=None, update=False):
+def fetch_positions(api, status=None, update=False):
     try:
         global positions
         if update: positions = api.positions
@@ -398,7 +398,7 @@ def get_live(WS, api):
             
             # To update PositionBook.
             if pdlm.now() > position_book_refresh_time.add(seconds=2):
-                position = fetch_positions('open', True)
+                position = fetch_positions(api, 'open', True)
                 if position:
                     # symbol, exchange, qty, average_price, side. 
                     pos_to_excel = [
