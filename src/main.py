@@ -1,7 +1,6 @@
 import os
 import time
 from symbol import Symbol, dct_sym
-from threading import Thread
 from traceback import print_exc
 
 import pandas as pd
@@ -9,13 +8,34 @@ import pendulum as pdlm
 import xlwings as xw
 from toolkit.kokoo import timer
 
-from constants import O_CNFG, O_FUTL, O_SETG, S_DATA, logging
+from constants import O_CNFG, O_SETG, S_DATA
 from login import get_bypass, get_zerodha
 from wsocket import Wsocket
 
 EXCEL_FILE_NAME = "VirajExcel.xlsm"
 EXCEL_FILE = S_DATA + EXCEL_FILE_NAME
-excel_name = xw.Book(EXCEL_FILE)
+
+
+def cp_xls_file():
+    # 1. checks for excel file in data folder.
+    if not os.path.exists(EXCEL_FILE):
+        if not os.path.exists(EXCEL_FILE_NAME):
+            print(
+                "Excel file not found, i think you have deleted it, Contact The Creator."
+            )
+            exit(1)
+        # move file to data folder.
+        try:
+            shutil = __import__("shutil")
+            shutil.copy2(EXCEL_FILE_NAME, EXCEL_FILE)
+        except Exception as e:
+            print(
+                f"[{time.ctime()}] Error while copying excel file to data folder: {e}"
+            )
+    return xw.Book(EXCEL_FILE)
+
+
+excel_name = cp_xls_file()
 
 
 def _get_orders(api, status=None, update=False):
@@ -68,38 +88,6 @@ def _get_positions(api, status=None, update=False):
         print(f"Error while getting Positions: {e}.")
 
 
-def _get_history(API, token):
-    try:
-        lst = []
-        FM = (
-            pdlm.now()
-            .subtract(days=2)
-            .set(hour=9, minute=15, second=0)
-            .strftime("%Y-%m-%d %H:%M:%S")
-        )
-        to = pdlm.now().strftime("%Y-%m-%d %H:%M:%S")
-        kwargs = dict(
-            instrument_token=token, from_date=FM, to_date=to, interval="minute"
-        )
-        hist = API.kite.historical_data(**kwargs)
-        if hist is not None and any(hist):
-            lst = [
-                dict(
-                    date=x["date"],
-                    open=x["open"],
-                    high=x["high"],
-                    low=x["low"],
-                    close=x["close"],
-                )
-                for x in hist
-            ]
-    except Exception as e:
-        # show_msg(e)
-        print_exc()
-    finally:
-        return lst
-
-
 def _format_funds(fund_json):
     output = []
     for k, v in fund_json.items():
@@ -115,7 +103,7 @@ def _format_funds(fund_json):
     return pd.DataFrame(output)
 
 
-def show_msg(err_txt, msg_type=None):
+def show_msg(err_txt, msg_type=False):
     excel_name = xw.Book(EXCEL_FILE)
     live_sheet = excel_name.sheets("LIVE")
     sheet_range = live_sheet.range("a1")
@@ -167,24 +155,6 @@ def clear_sheets():
     symbol_sheet.range("A1:C100").value = None
 
 
-def cp_xls_file():
-    # 1. checks for excel file in data folder.
-    if not os.path.exists(EXCEL_FILE):
-        if not os.path.exists(EXCEL_FILE_NAME):
-            print(
-                "Excel file not found, i think you have deleted it, Contact The Creator."
-            )
-            exit(1)
-        # move file to data folder.
-        try:
-            shutil = __import__("shutil")
-            shutil.copy2(EXCEL_FILE_NAME, EXCEL_FILE)
-        except Exception as e:
-            print(
-                f"[{time.ctime()}] Error while copying excel file to data folder: {e}"
-            )
-
-
 def save_symbol_sheet(WS):
     try:
         resp = None
@@ -203,21 +173,63 @@ def save_symbol_sheet(WS):
         ][0]
         atm = sym.calc_atm_from_ltp(ltp)
         lst = sym.find_token_from_dump(atm)
+        # get instrument token from the first item
+        instrument_token = lst[0]["instrument_token"]
+
+        is_found = False
+        while not is_found:
+            resp = WS.ltp(lst)
+            is_found = any(
+                [dct["instrument_token"] == instrument_token for dct in resp]
+            )
+            show_msg("waiting for data", is_found)
+            timer(1)
+
         df = pd.DataFrame(lst)
         symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
         symbol_sheet.range("a1").options(index=False, header=True).value = df
         excel_name.save()
-        _ = WS.ltp(lst)
-        print("symbols", lst)
+
     except Exception as e:
         print("[{}] Error while saving symbol sheet: {}".format(time.ctime(), e))
 
 
-def filter_lows(api):
+def filter_lows(api, instrument_token):
+    def get_history(API, token):
+        try:
+            lst = []
+            FM = (
+                pdlm.now()
+                .subtract(days=2)
+                .set(hour=9, minute=15, second=0)
+                .strftime("%Y-%m-%d %H:%M:%S")
+            )
+            to = pdlm.now().strftime("%Y-%m-%d %H:%M:%S")
+            kwargs = dict(
+                instrument_token=token, from_date=FM, to_date=to, interval="minute"
+            )
+            hist = API.kite.historical_data(**kwargs)
+            if hist is not None and any(hist):
+                lst = [
+                    dict(
+                        date=x["date"],
+                        open=x["open"],
+                        high=x["high"],
+                        low=x["low"],
+                        close=x["close"],
+                    )
+                    for x in hist
+                ]
+        except Exception as e:
+            show_msg(e)
+            print_exc()
+        finally:
+            return lst
+
     try:
-        data = _get_history(api, instrument_token)[::-1]
+        data = get_history(api, instrument_token)[::-1]
         data_to_return = ["-", "-", "-", "-", "-", "-"]
-        if data:
+        if any(data):
             for i, candle in enumerate(data):
                 if i >= 6:
                     break
@@ -226,54 +238,6 @@ def filter_lows(api):
     except Exception as e:
         show_msg(e)
         print_exc()
-
-
-def get_order_id(order_details):
-    symbol = order_details[0]
-    exchange = order_details[1]
-    qty = order_details[2]
-    order_type = order_details[3]
-    limit_price = order_details[4]
-    trigger_price = order_details[5]
-
-    for order in orders:
-        if all(
-            (
-                order["symbol"] == symbol,
-                order["exchange"] == exchange,
-                order["filled_quantity"] == qty,
-                order["side"] == order_type,
-                order["price"] == limit_price,
-                order["trigger_price"] == trigger_price,
-            )
-        ):
-            return order["order_id"]
-    return None
-
-
-def get_qty_from_positions(order_details):
-    symbol = order_details[0]
-    exchange = order_details[1]
-    for position in positions:
-        if position["symbol"] == symbol and position["exchange"] == exchange:
-            return position["quantity"]
-    return 0
-
-
-def get_order_id_for_position(order_details):
-    symbol = order_details[0]
-    exchange = order_details[1]
-    orders_to_cancel = []
-    for order in orders:
-        if all(
-            (
-                order["symbol"] == symbol,
-                order["exchange"] == exchange,
-                order["status"] not in ("COMPLETE", "CANCELED", "REJECTED"),
-            )
-        ):
-            orders_to_cancel.append(order["order_id"])
-    return orders_to_cancel
 
 
 def update_sheet_data(api):
@@ -430,7 +394,55 @@ def refresh_books(api):
             live_sheet.range("R22:V33").value = pos_to_excel
 
 
-def get_live(WS, api):
+def get_order_id(order_details):
+    symbol = order_details[0]
+    exchange = order_details[1]
+    qty = order_details[2]
+    order_type = order_details[3]
+    limit_price = order_details[4]
+    trigger_price = order_details[5]
+
+    for order in orders:
+        if all(
+            (
+                order["symbol"] == symbol,
+                order["exchange"] == exchange,
+                order["filled_quantity"] == qty,
+                order["side"] == order_type,
+                order["price"] == limit_price,
+                order["trigger_price"] == trigger_price,
+            )
+        ):
+            return order["order_id"]
+    return None
+
+
+def get_qty_from_positions(order_details):
+    symbol = order_details[0]
+    exchange = order_details[1]
+    for position in positions:
+        if position["symbol"] == symbol and position["exchange"] == exchange:
+            return position["quantity"]
+    return 0
+
+
+def get_order_id_for_position(order_details):
+    symbol = order_details[0]
+    exchange = order_details[1]
+    orders_to_cancel = []
+    for order in orders:
+        if all(
+            (
+                order["symbol"] == symbol,
+                order["exchange"] == exchange,
+                order["status"] not in ("COMPLETE", "CANCELED", "REJECTED"),
+            )
+        ):
+            orders_to_cancel.append(order["order_id"])
+    return orders_to_cancel
+
+
+def run(WS, api):
     global symbol_in_focus, instrument_token, orders, positions, DATA
     symbol_in_focus = None
     DATA = {}
@@ -449,6 +461,7 @@ def get_live(WS, api):
                 WS.is_dirty = False
 
             # Table 2: To Update last_price & candle data.
+            """
             symbol_in_excel = live_sheet.range("I6").value
             if symbol_in_excel is not None and symbol_in_focus != symbol_in_excel:
                 symbol_in_focus = symbol_in_excel
@@ -466,29 +479,12 @@ def get_live(WS, api):
                         continue
                     print(f"Detected new symbol: {symbol_in_focus}")
                     instrument_token = int(fdf.instrument_token[0])
-                    """
-                    # Subscribing New Symbol.
-                    print(f"[{time.ctime()}] Subscribed to Token: {instrument_token} ({symbol_in_focus}).")
-                    # Filling Some Infos.
-                    live_sheet.range("B3").value = str(fdf.lot_size[0])
-                    live_sheet.range("C3").value = str(fdf.tick_size[0])
-                    itmType = str(fdf.instrument_type[0])
-                    if itmType == "FUT": strike = itmType
-                    else: strike = f"{fdf.strike[0]} {itmType}"
-                    live_sheet.range("E3").value = str(strike)
-                    live_sheet.range("G6").value = str(fdf.expiry[0])
-                    """
-                    live_sheet.range("H6").value = instrument_token
-                    live_sheet.range("K6:P6").value = live_sheet.range(
-                        "Q6:V6"
-                    ).value = filter_lows(api)
-                    delay_candle_set_time = pdlm.now()
-                    computed_candle_data = pd.DataFrame(columns=["time", "last_price"])
                 except Exception as e:
                     msg = f"[{time.ctime()}] Error : {e}"
                     show_msg(msg)
                     print_exc()
 
+        """
             # Tick Processing
             if symbol_in_focus is not None:
                 # Candle Data Processing...
@@ -778,14 +774,13 @@ def init():
         # 🟢, 🛈, ℹ , 🔔, 🚀 ...
         print("Zerodha Excel Based Terminal program initialized")
         print(f"📌 Process id: {os.getpid()}.")
-        cp_xls_file()
         api = get_kite()
         if api:
             print("🟢 Logged in Successfully")
             clear_sheets()
             WS = Wsocket(api.kite)
             save_symbol_sheet(WS)
-            get_live(WS, api)
+            run(WS, api)
             print("🚀 Enjoy the automation...")
 
         else:
