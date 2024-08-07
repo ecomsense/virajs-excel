@@ -451,6 +451,8 @@ def update_ltp(WS, symbol_df):
         timer(1)
     # update last_price column  for  if resp list of dictionary key == instrument_token
     symbol_lst = symbol_df.to_dict(orient="records")
+    print(resp)
+    timer(5)
     for symbol in symbol_lst:
         symbol["last_price"] = [
             dct["last_price"]
