@@ -190,8 +190,10 @@ def save_symbol_sheet(WS):
         df_merged = pd.merge(df_symbols, df_quotes, on="instrument_token")
         symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
         symbol_sheet.range("a1").options(index=False, header=True).value = df_merged
-        excel_name.save()
 
+        live_sheet = excel_name.sheets("LIVE")
+        live_sheet.range("H6:J6").options(index=False, header=False).value = df_merged.iloc[[0]]
+        excel_name.save()
     except Exception as e:
         print("[{}] Error while saving symbol sheet: {}".format(time.ctime(), e))
 
@@ -445,6 +447,10 @@ def get_order_id_for_position(order_details):
 
 
 def update_ltp(WS, symbol_df):
+    resp = False
+    while not resp:
+        resp = WS.ltp()
+    df = pd.DataFrame(resp)
     def func(row):
         data = df[df.instrument_token == row.name]
         if not data.empty:
@@ -452,10 +458,6 @@ def update_ltp(WS, symbol_df):
         data = row.last_price
         return data
 
-    resp = False
-    while not resp:
-        resp = WS.ltp()
-    df = pd.DataFrame(resp)
     symbol_df["last_price"] = symbol_df.apply(func, axis=1)
     return symbol_df
 
@@ -485,7 +487,7 @@ def run(WS, api):
 
             # Table 2: To Update last_price & candle data.
             symbol_df = update_ltp(WS, symbol_df)
-            symbol_sheet("A1:C100").value = symbol_df
+            symbol_sheet.range("A1:C100").value = symbol_df
 
             """
             symbol_in_excel = live_sheet.range("I6").value
