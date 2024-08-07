@@ -192,7 +192,9 @@ def save_symbol_sheet(WS):
         symbol_sheet.range("a1").options(index=False, header=True).value = df_merged
 
         live_sheet = excel_name.sheets("LIVE")
-        live_sheet.range("H6:J6").options(index=False, header=False).value = df_merged.iloc[[0]]
+        live_sheet.range("H6:J6").options(
+            index=False, header=False
+        ).value = df_merged.iloc[[0]]
         excel_name.save()
     except Exception as e:
         print("[{}] Error while saving symbol sheet: {}".format(time.ctime(), e))
@@ -451,6 +453,7 @@ def update_ltp(WS, symbol_df):
     while not resp:
         resp = WS.ltp()
     df = pd.DataFrame(resp)
+
     def func(row):
         data = df[df.instrument_token == row.name]
         if not data.empty:
@@ -486,37 +489,13 @@ def run(WS, api):
                 WS.is_dirty = False
 
             # Table 2: To Update last_price & candle data.
-            symbol_df = update_ltp(WS, symbol_df)
-            symbol_sheet.range("A1:C100").value = symbol_df
+            updated_df = update_ltp(WS, symbol_df)
+            symbol_sheet.range("A1:C100").value = updated_df
 
-            """
-            symbol_in_excel = live_sheet.range("I6").value
-            if symbol_in_excel is not None and symbol_in_focus != symbol_in_excel:
-                symbol_in_focus = symbol_in_excel
-                try:
-                    fdf = (
-                        bank_nifty_df[bank_nifty_df.tradingsymbol == symbol_in_excel]
-                        .reset_index(drop=True)
-                        .head(1)
-                    )
-                    # Unsubscribing Unnecessary Old Symbols.
-                    if fdf.empty:
-                        print(f"Wrong Symbol: {symbol_in_excel}")
-                        live_sheet.range("G6:V6").value = None
-                        symbol_in_focus = WS.ticks = None
-                        continue
-                    print(f"Detected new symbol: {symbol_in_focus}")
-                    instrument_token = int(fdf.instrument_token[0])
-                except Exception as e:
-                    msg = f"[{time.ctime()}] Error : {e}"
-                    show_msg(msg)
-                    print_exc()
-
-        """
-            # Tick Processing
+            # Tick Processinga
+            symbol_in_focus = live_sheet.range("D6").value
             if symbol_in_focus is not None:
-                # Candle Data Processing...
-
+                # copy historical data Data
                 cad_cell1 = live_sheet.range("K6:P6")
                 if pdlm.now() > delay_candle_set_time.add(minutes=1, seconds=15):
                     print(f"[{time.ctime()}] refreshing 1min candle with 15s delay")
@@ -528,6 +507,7 @@ def run(WS, api):
                 for row in live_sheet.range("B6:E15").rows:
                     order_details = row.value
                     if order_details[3] == "ORDER":
+                        WS.is_dirty = True
                         qty = order_details[0]
                         price = order_details[1]
                         trigger_price = order_details[2]
@@ -565,6 +545,7 @@ def run(WS, api):
             for row in live_sheet.range("C22:O33").rows:
                 order_details = row.value
                 if order_details[8] == "ORDER":
+                    WS.is_dirty = True
                     order_details[2] = int(str(order_details[2]).split("/")[0])
                     sl_trigger = order_details[6]
                     limit = order_details[7]
@@ -597,6 +578,7 @@ def run(WS, api):
                     row[8].value = "READY"
 
                 elif order_details[11] == "ORDER":
+                    WS.is_dirty = True
                     order_details[2] = int(str(order_details[2]).split("/")[0])
                     sl_trigger = order_details[9]
                     limit = order_details[10]
@@ -627,6 +609,7 @@ def run(WS, api):
                     row[8:12].value = ["READY", None, None, "READY"]
 
                 elif order_details[12] == "ORDER":
+                    WS.is_dirty = True
                     order_details[2] = int(str(order_details[2]).split("/")[0])
                     order_id = get_order_id(order_details)
                     if order_id:
@@ -656,6 +639,7 @@ def run(WS, api):
                 order_details = row.value
 
                 if order_details[7] == "ORDER":
+                    WS.is_dirty = True
                     sl_trigger = order_details[5]
                     limit = order_details[6]
                     # 1. Cancel open orders of the symbol.
@@ -693,6 +677,7 @@ def run(WS, api):
                             "tag": "EXCEL_TRADE",
                         }
                         try:
+                            WS.is_dirty = True
                             d = api.order_place(**args)
                         except Exception as e:
                             msg = f"[{time.ctime()}] Error while placing {order_type}-sell order: {e}"
