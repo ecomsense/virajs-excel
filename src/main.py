@@ -185,9 +185,11 @@ def save_symbol_sheet(WS):
             show_msg("waiting for data", is_found)
             timer(1)
 
-        df = pd.DataFrame(lst)
+        df_symbols = pd.DataFrame(lst)
+        df_quotes = pd.DataFrame(resp)
+        df_merged = pd.merge(df_symbols, df_quotes, on="instrument_token")
         symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
-        symbol_sheet.range("a1").options(index=False, header=True).value = df
+        symbol_sheet.range("a1").options(index=False, header=True).value = df_merged
         excel_name.save()
 
     except Exception as e:
@@ -449,7 +451,7 @@ def run(WS, api):
     orders = positions = []
     live_sheet = excel_name.sheets("LIVE")
     delay_candle_set_time = candle_gen_time = pdlm.now()
-    show_msg("HAPPY TRADING", "success")
+    show_msg("HAPPY TRADING", True)
 
     while True:
         try:
@@ -520,7 +522,7 @@ def run(WS, api):
                                 "trigger_price": trigger_price,
                                 "tag": "EXCEL_TRADE",
                             }
-                            show_msg(args, "success")
+                            show_msg(args, True)
                             try:
                                 d = api.order_place(**args)
                             except Exception as e:
@@ -528,7 +530,7 @@ def run(WS, api):
                                 show_msg(msg)
                             else:
                                 msg = f"[{time.ctime()}] Order Placed Successfully, OrderId: {d}"
-                                show_msg(msg, "success")
+                                show_msg(msg, True)
 
                         # It will reset the button.
                         row[3].value = "READY"
@@ -562,7 +564,7 @@ def run(WS, api):
                         else:
                             msg = f"[{time.ctime()}] Modified as {order_type}-Order Successfully, OrderId: {d}"
                             row[:11].value = None
-                            show_msg(msg, "success")
+                            show_msg(msg, True)
 
                     # It will clear the data & reset the button.
                     row[6:11].value = None
@@ -593,7 +595,7 @@ def run(WS, api):
                             show_msg(msg)
                         else:
                             msg = f"[{time.ctime()}] Modified as {order_type}-Order Successfully, OrderId: {d}"
-                            show_msg(msg, "success")
+                            show_msg(msg, True)
 
                     # It will clear the data & reset the button.
                     row[8:12].value = ["READY", None, None, "READY"]
@@ -616,7 +618,7 @@ def run(WS, api):
                             print_exc()
                         else:
                             msg = f"[{time.ctime()}] Modified as Market-Order Successfully, OrderId: {d}"
-                            print(msg, "success")
+                            print(msg, True)
 
                     # It will reset the button.
                     row[8:13].value = ["READY", None, None, "READY", "READY"]
@@ -671,7 +673,7 @@ def run(WS, api):
                             show_msg(msg)
                         else:
                             msg = f"[{time.ctime()}] {order_type}-Sell Order Placed Successfully, OrderId: {d}."
-                            show_msg(msg, "success")
+                            show_msg(msg, True)
                     # It will clear the data & reset the button.
                     row[5:8].value = [None, None, "READY"]
 
@@ -718,7 +720,7 @@ def run(WS, api):
                             show_msg(msg)
                         else:
                             msg = f"[{time.ctime()}] {order_type}-Sell Order Placed Successfully, OrderId: {d}."
-                            show_msg(msg, "success")
+                            show_msg(msg, True)
                     # It will clear the data & reset the button.
                     row[8:11].value = [None, None, "READY"]
 
@@ -757,7 +759,7 @@ def run(WS, api):
                             show_msg(msg)
                         else:
                             msg = f"[{time.ctime()}] MARKET-Sell Order Placed Successfully, OrderId: {d}."
-                            show_msg(msg, "success")
+                            show_msg(msg, True)
 
                     # It will reset the button.
                     row[7:12].value = ["READY", None, None, "READY", "READY"]
