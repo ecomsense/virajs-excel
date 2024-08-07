@@ -445,21 +445,18 @@ def get_order_id_for_position(order_details):
 
 
 def update_ltp(WS, symbol_df):
+    def func(row):
+        data = df[df.instrument_token == row.name]
+        if not data.empty:
+            data = data.last_price
+        data = row.last_price
+        return data
+
     resp = False
     while not resp:
         resp = WS.ltp()
-        timer(1)
-    # update last_price column  for  if resp list of dictionary key == instrument_token
-    symbol_lst = symbol_df.to_dict(orient="records")
-    print(resp)
-    timer(5)
-    for symbol in symbol_lst:
-        symbol["last_price"] = [
-            dct["last_price"]
-            for dct in resp
-            if dct["instrument_token"] == symbol["instrument_token"]
-        ][0]
-    symbol_df = pd.DataFrame(symbol_lst)
+    df = pd.DataFrame(resp)
+    symbol_df["last_price"] = symbol_df.apply(func, axis=1)
     return symbol_df
 
 
