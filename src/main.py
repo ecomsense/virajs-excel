@@ -450,7 +450,14 @@ def update_ltp(WS, symbol_df):
         resp = WS.ltp()
         timer(1)
     # update last_price column  for  if resp list of dictionary key == instrument_token
-    # df_symbol_df["last_price"] = []
+    symbol_lst = symbol_df.to_dict(orient="records")
+    for symbol in symbol_lst:
+        symbol["last_price"] = [
+            dct["last_price"]
+            for dct in resp
+            if dct["instrument_token"] == symbol["instrument_token"]
+        ][0]
+    symbol_df = pd.DataFrame(symbol_lst)
     return symbol_df
 
 
@@ -459,10 +466,10 @@ def run(WS, api):
     symbol_in_focus = None
     DATA = {}
     orders = positions = []
-    symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
     live_sheet = excel_name.sheets("LIVE")
 
-    symbol_df = symbol_sheet.range("A1:C100").options(pd.DataFrame).value
+    symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
+    symbol_df = symbol_sheet.range("A1:C190").options(pd.DataFrame).value
     # remove columns and rows that are empty
     symbol_df.dropna(axis=0, how="all", inplace=True)
     delay_candle_set_time = candle_gen_time = pdlm.now()
@@ -478,7 +485,9 @@ def run(WS, api):
                 WS.is_dirty = False
 
             # Table 2: To Update last_price & candle data.
-            update_ltp(WS, symbol_df)
+            symbol_df = update_ltp(WS, symbol_df)
+            symbol_sheet("A1:C100").value = symbol_df
+
             """
             symbol_in_excel = live_sheet.range("I6").value
             if symbol_in_excel is not None and symbol_in_focus != symbol_in_excel:
