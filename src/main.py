@@ -444,12 +444,27 @@ def get_order_id_for_position(order_details):
     return orders_to_cancel
 
 
+def update_ltp(WS, symbol_df):
+    resp = False
+    while not resp:
+        resp = WS.ltp()
+        timer(1)
+    # update last_price column  for  if resp list of dictionary key == instrument_token
+    # df_symbol_df["last_price"] = []
+    return symbol_df
+
+
 def run(WS, api):
     global symbol_in_focus, instrument_token, orders, positions, DATA
     symbol_in_focus = None
     DATA = {}
     orders = positions = []
+    symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
     live_sheet = excel_name.sheets("LIVE")
+
+    symbol_df = symbol_sheet.range("A1:C100").options(pd.DataFrame).value
+    # remove columns and rows that are empty
+    symbol_df.dropna(axis=0, how="all", inplace=True)
     delay_candle_set_time = candle_gen_time = pdlm.now()
     show_msg("HAPPY TRADING", True)
 
@@ -463,6 +478,7 @@ def run(WS, api):
                 WS.is_dirty = False
 
             # Table 2: To Update last_price & candle data.
+            update_ltp(WS, symbol_df)
             """
             symbol_in_excel = live_sheet.range("I6").value
             if symbol_in_excel is not None and symbol_in_focus != symbol_in_excel:
