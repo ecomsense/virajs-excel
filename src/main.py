@@ -476,7 +476,7 @@ def run(WS, api):
     symbol_df = symbol_sheet.range("A1:C190").options(pd.DataFrame).value
     # remove columns and rows that are empty
     symbol_df.dropna(axis=0, how="all", inplace=True)
-    delay_candle_set_time = candle_gen_time = pdlm.now()
+    delay_candle_set_time = pdlm.now()
     show_msg("HAPPY TRADING", True)
 
     while True:
@@ -492,12 +492,19 @@ def run(WS, api):
             updated_df = update_ltp(WS, symbol_df)
             symbol_sheet.range("A1:C100").value = updated_df
 
-            # Tick Processinga
+            # symbol change
             symbol_in_focus = live_sheet.range("D6").value
+            if symbol_in_focus:
+                pass
+            # Tick Processinga
+            instrument_token = live_sheet.range("C6").value
             if symbol_in_focus is not None:
+                # history data
+                lst = filter_lows(api, instrument_token)
+                live_sheet.range("K6:P6").value = lst
                 # copy historical data Data
                 cad_cell1 = live_sheet.range("K6:P6")
-                if pdlm.now() > delay_candle_set_time.add(minutes=1, seconds=15):
+                if pdlm.now() > delay_candle_set_time.add(seconds=15):
                     print(f"[{time.ctime()}] refreshing 1min candle with 15s delay")
                     live_sheet.range("Q6:V6").value = cad_cell1.value
                     delay_candle_set_time = pdlm.now()
@@ -775,7 +782,7 @@ def run(WS, api):
                     # It will reset the button.
                     row[7:12].value = ["READY", None, None, "READY", "READY"]
 
-            timer(0.8)
+            timer(1)
         except Exception as e:
             show_msg(e)
             print_exc()
