@@ -1,5 +1,6 @@
 log_level: 10
 show_log: 1
+broker: zerodha
 base: BANKNIFTY
 BANKNIFTY:
   exchange: NFO
