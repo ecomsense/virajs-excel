@@ -2,7 +2,6 @@ import os
 import time
 from symbol import Symbol, dct_sym
 from traceback import print_exc
-
 import pandas as pd
 import pendulum as pdlm
 import xlwings as xw
@@ -189,13 +188,11 @@ def save_symbol_sheet(WS):
         df_quotes = pd.DataFrame(resp)
         df_merged = pd.merge(df_symbols, df_quotes, on="instrument_token")
         symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
+        symbol_sheet.range("a1").options(index=False, header=True).value = df_symbols
         symbol_sheet.range("a1").options(index=False, header=True).value = df_merged
 
-        live_sheet = excel_name.sheets("LIVE")
-        live_sheet.range("H6:J6").options(
-            index=False, header=False
-        ).value = df_merged.iloc[[0]]
         excel_name.save()
+        print(f"ℹ  Loaded {BASE} symbols in sheet.")
     except Exception as e:
         print("[{}] Error while saving symbol sheet: {}".format(time.ctime(), e))
 
@@ -234,12 +231,13 @@ def filter_lows(api, instrument_token):
 
     try:
         data = get_history(api, instrument_token)[::-1]
-        data_to_return = ["-", "-", "-", "-", "-", "-"]
+        data_to_return = [["-", "-", "-", "-", "-", "-"], ["-", "-", "-", "-", "-", "-"]]
         if any(data):
             for i, candle in enumerate(data):
                 if i >= 6:
                     break
-                data_to_return[i] = candle.get("low", "-")
+                data_to_return[0][i] = candle.get("date", "-")
+                data_to_return[1][i] = candle.get("low", "-")
         return data_to_return
     except Exception as e:
         show_msg(e)
@@ -453,15 +451,12 @@ def update_ltp(WS, symbol_df):
     while not resp:
         resp = WS.ltp()
     df = pd.DataFrame(resp)
-
     def func(row):
-        data = df[df.instrument_token == row.name]
+        data = df[df.instrument_token == row.instrument_token]
         if not data.empty:
-            data = data.last_price
-        data = row.last_price
-        return data
-
-    symbol_df["last_price"] = symbol_df.apply(func, axis=1)
+            row.last_price = data.last_price.iloc[0]
+        return row
+    symbol_df = symbol_df.apply(func, axis=1)
     return symbol_df
 
 
@@ -473,7 +468,7 @@ def run(WS, api):
     live_sheet = excel_name.sheets("LIVE")
 
     symbol_sheet = excel_name.sheets("BANKNIFTY_SYMBOL_DETAILS")
-    symbol_df = symbol_sheet.range("A1:C190").options(pd.DataFrame).value
+    symbol_df = symbol_sheet.range("A1:C190").options(pd.DataFrame).value.reset_index()
     # remove columns and rows that are empty
     symbol_df.dropna(axis=0, how="all", inplace=True)
     delay_candle_set_time = pdlm.now()
@@ -490,24 +485,53 @@ def run(WS, api):
 
             # Table 2: To Update last_price & candle data.
             updated_df = update_ltp(WS, symbol_df)
-            symbol_sheet.range("A1:C100").value = updated_df
+            symbol_sheet.range("C2").options(index=False, header=False).value = updated_df.last_price.reset_index(drop=True)
 
-            # symbol change
-            symbol_in_focus = live_sheet.range("D6").value
-            if symbol_in_focus:
-                pass
-            # Tick Processinga
-            instrument_token = live_sheet.range("C6").value
+            # Detecting Symbol Change.
+            symbol_in_excel = live_sheet.range("I6").value
+            if symbol_in_excel and symbol_in_focus != symbol_in_excel:
+                try:
+                    fdf = symbol_df[symbol_df.tradingsymbol == symbol_in_excel].reset_index(drop=True).head(1)
+                    if fdf.empty:
+                        print(f"Wrong Symbol: {symbol_in_excel}")
+                        live_sheet.range("G6:V6").value = None
+                        symbol_in_focus = None
+                        continue
+                    symbol_in_focus = symbol_in_excel
+                    print(f'Detected New Symbol: {symbol_in_focus}')
+                    instrument_token = int(fdf.instrument_token[0])
+                    # Saving Instrument Token in cell
+                    live_sheet.range("H6").value = instrument_token
+                except Exception as e:
+                    msg = f"[{time.ctime()}] Error: {e}"
+                    show_msg(msg)
+                    print(msg)
+
+            # Updating LTP & Candle Data.
             if symbol_in_focus is not None:
-                # history data
-                lst = filter_lows(api, instrument_token)
-                live_sheet.range("K6:P6").value = lst
-                # copy historical data Data
-                cad_cell1 = live_sheet.range("K6:P6")
-                if pdlm.now() > delay_candle_set_time.add(seconds=15):
-                    print(f"[{time.ctime()}] refreshing 1min candle with 15s delay")
-                    live_sheet.range("Q6:V6").value = cad_cell1.value
-                    delay_candle_set_time = pdlm.now()
+                try:
+                    instrument_token = live_sheet.range("H6").value
+                    if not instrument_token:
+                        continue 
+                    ltp_cell = live_sheet.range('J6')
+                    data = dict(instrument_token=instrument_token)
+                    data = pd.DataFrame(WS.ltp())
+                    data = data[data.instrument_token == instrument_token]
+                    if not data.empty:
+                        ltp_cell.value = data.last_price.iloc[0]
+                    instrument_token = int(instrument_token)
+                    # Updating Candle Data.
+                    lst = filter_lows(api, instrument_token)
+                    cad_cell1 = live_sheet.range("K5:P6")
+                    cad_cell1.value = lst
+                    # Refreshing 1min Candle data with 15s delay.
+                    if pdlm.now() > delay_candle_set_time.add(seconds=15):
+                        live_sheet.range("Q5:V6").value = cad_cell1.value
+                        delay_candle_set_time = pdlm.now()
+                except Exception as e:
+                    msg = f"[{time.ctime()}] Error while updating candle data: {e}."
+                    show_msg(msg)
+                    print(msg)
 
             # Table 1: To Place Requested Orders.
             if symbol_in_focus:
@@ -799,9 +823,10 @@ def init():
             print("🟢 Logged in Successfully")
             clear_sheets()
             WS = Wsocket(api.kite)
+            print("🟢 Connected to WebSocket...")
             save_symbol_sheet(WS)
-            run(WS, api)
             print("🚀 Enjoy the automation...")
+            run(WS, api)
 
         else:
             print(
