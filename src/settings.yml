@@ -1,7 +1,15 @@
 log_level: 10
 show_log: 1
-broker: bypass
 base: BANKNIFTY
 BANKNIFTY:
   exchange: NFO
-  expiry: "24807"
+  expiry: "24814"
+NIFTY:
+  exchange: NFO
+  expiry: "24814"
+MIDCPNIFTY:
+  exchange: NFO
+  expiry: "24819"
+FINNIFTY:
+  exchange: NFO
+  expiry: "24813"   
